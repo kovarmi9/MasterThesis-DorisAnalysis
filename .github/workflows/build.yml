@@ -1,0 +1,114 @@
+name: Build PDF from LaTeX
+
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - "Thesis.pdf"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Compile LaTeX → PDF
+    if: contains(github.event.head_commit.message, '[build]') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      # Git identita hned na začátku (budeme commitovat 2×)
+      - name: "Git identity"
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      # Ujisti se, že jedeme z aktuálního main (bez toho můžeš pushnout na starý commit)
+      - name: "Sync with origin/main"
+        run: |
+          git fetch origin main
+          git rebase origin/main
+
+      # --- Vlna (nezlomitelné mezery) ---
+      - name: "Typografie – vlna (nezlomitelné mezery v LaTeX/)"
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ ! -d "LaTeX" ]; then
+            echo "Adresář LaTeX/ neexistuje, vlnu přeskakuji."
+            exit 0
+          fi
+
+          mapfile -d '' files < <(find LaTeX -type f -name '*.tex' -print0)
+
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "Žádné .tex soubory v LaTeX/ nenalezeny, vlnu přeskakuji."
+            exit 0
+          fi
+
+          echo "Spouštím vlnu na ${#files[@]} souborech…"
+          docker run --rm -v "$PWD":/src bartimar/vlna \
+            -l -m -n -r "${files[@]/#/\/src\/}"
+
+      # --- Commit & push změn od vlny (jen když něco změnila) ---
+      - name: "Commit and push typographic changes (vlna)"
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Přidáme jen .tex změny (ať si omylem necommitne PDF apod.)
+          git add LaTeX/**/*.tex || true
+          git add LaTeX/*.tex || true
+
+          if git diff --cached --quiet; then
+            echo "Vlna nic nezměnila → žádný commit."
+            exit 0
+          fi
+
+          git commit -m "chore(typography): add non-breaking spaces (vlna) [skip ci]"
+          git push origin HEAD:main
+
+      # (volitelné) varování na duplicitní \label, ale neshodí build
+      - name: "Preflight – duplicate \\label keys (warning only)"
+        working-directory: LaTeX
+        shell: bash
+        continue-on-error: true
+        run: |
+          DUPES=$(grep -Rho '\\label{[^}]*}' . | sed 's/.*{//; s/}//' | sort | uniq -d || true)
+          if [[ -n "$DUPES" ]]; then
+            echo "::warning::Nalezeny duplicitní labely:"; echo "$DUPES" | sed 's/^/  - /'
+          fi
+
+      # --- PDF (LaTeX → PDF) ---
+      - name: "Compile LaTeX to PDF (pdfLaTeX)"
+        uses: xu-cheng/latex-action@v3
+        with:
+          docker_image: ghcr.io/xu-cheng/texlive-full:latest
+          working_directory: LaTeX
+          root_file: main.tex
+          args: -pdf -interaction=nonstopmode -file-line-error
+
+      # --- Výstup do rootu repa ---
+      - name: "Move compiled PDF to repo root"
+        run: |
+          cp -f LaTeX/main.pdf Thesis.pdf || echo "PDF missing"
+          ls -lh Thesis.pdf
+
+      # --- Commit & push PDF ---
+      - name: "Commit and push PDF"
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git add -f Thesis.pdf
+          if git diff --cached --quiet; then
+            echo "PDF beze změny → žádný commit."
+            exit 0
+          fi
+
+          git commit -m "Auto-build: Thesis.pdf [skip ci]"
+          git push origin HEAD:main
