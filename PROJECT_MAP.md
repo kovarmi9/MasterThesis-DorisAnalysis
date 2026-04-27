@@ -1,6 +1,6 @@
 # Mapa projektu
 
-Tento dokument popisuje aktualni strukturu projektu `MasterThesis-DorisAnalysis`, hlavni moduly a datove toky. Projekt je ted baleny pod Python package `doris` a pokryva nacitani DORIS dat, stanicni trendovou analyzu, praci s orbitami ve formatu SP3 a pomocne vystupy pro grafy/tabulky.
+Tento dokument popisuje aktualni strukturu projektu `MasterThesis-DorisAnalysis`, hlavni moduly a datove toky. Projekt je ted baleny pod Python package `doris` a pokryva nacitani DORIS dat, stanicni trendovou analyzu, pripravenou spectralni analyzu, praci s orbitami ve formatu SP3 a pomocne vystupy pro grafy/tabulky.
 
 ## Rychly prehled
 
@@ -19,6 +19,7 @@ MasterThesis-DorisAnalysis/
 |       |   +-- ssh/
 |       +-- analysis/
 |       |   +-- stations/
+|       |   +-- spectral/
 |       |   +-- orbits/
 |       |       +-- loading/
 |       |       +-- interpolate/
@@ -30,11 +31,10 @@ MasterThesis-DorisAnalysis/
 +-- notebooks/
 |   +-- stations/
 |       +-- download_cddis.ipynb
+|       +-- spectral_analysis.ipynb
 |       +-- trend_detection.ipynb
 +-- data/
 |   +-- stcd/gop25wd04/
-+-- private/
-|   +-- login.txt
 +-- LaTeX/
     +-- build/
 ```
@@ -55,6 +55,7 @@ Aktualne obsahuje:
 - vstupni workflow pro CDDIS, SSH a lokalni slozky,
 - sdilene utility pro cesty a dekompresi,
 - stanicni trendovou analyzu,
+- placeholder moduly pro spectralni analyzu,
 - orbitni loading/interpolaci/porovnani/transformace,
 - pomocniky pro nastaveni os grafu.
 
@@ -155,6 +156,16 @@ Moduly pro fitovani trendu stanicnich casovych rad.
   - `fit_piecewise_trend()` pro BIC-vybirany po castech linearni trend.
   - Podporuje OLS/WLS, breakpoints, residualy, fitted hodnoty, export do DataFrame a segmentove summary.
   - Hlavni vysledky jsou `TrendResult` a `SegmentResult`.
+
+### `src/doris/analysis/spectral/`
+
+Pripravena cast pro spectralni analyzu stanicnich casovych rad.
+
+- `periodogram.py`
+  - Aktualne prazdny placeholder pro periodogram / frekvencni analyzu.
+
+- `peaks.py`
+  - Aktualne prazdny placeholder pro detekci spektralnich spickek.
 
 ## Analyza orbit
 
@@ -267,6 +278,10 @@ Aktualni logika:
 5. Pouziva paralelni download (`max_workers=16`) a dekompresi.
 6. Vypisuje URL datasetu, `MD5SUMS`, pocet archivu, stazenych a dekomprimovanych souboru.
 
+### `notebooks/stations/spectral_analysis.ipynb`
+
+Notebook pro rozpracovanou spectralni analyzu stanicnich casovych rad. Navazuje na stanicni STCD data a zatim ma oporu v prazdnych modulech `src/doris/analysis/spectral/periodogram.py` a `peaks.py`.
+
 ### `notebooks/stations/trend_detection.ipynb`
 
 Notebook pro stanicni trendovou analyzu nad STCD daty. Podle struktury vystupu v `data/stcd/gop25wd04/exports/licb/` pracuje s vybranou stanici `licb`, exportuje vyrezana data, detrendovane rady a trendove tabulky.
@@ -282,11 +297,13 @@ Lokalni data stazena z CDDIS:
 - `images/licb/` s PDF grafy pro stanici `licb`,
 - `exports/licb/` s CSV a LaTeX tabulkami pro trendove varianty.
 
-### `private/`
+Poznamka: `data/` je v `.gitignore`, takze jde o lokalni pracovni data, ne nutne o verzovanou cast repozitare.
 
-Obsahuje soukrome prihlasovaci udaje, napr. `private/login.txt`. Tato slozka by nemela byt commitovana.
+### Soukrome prihlasovaci soubory
 
-Pozor: v aktualnim seznamu souboru je take `notebooks/stations/login.txt`; pokud obsahuje realne prihlasovaci udaje, patri mimo verzovani nebo do ignorovane privatni slozky.
+V aktualnim stromu je `notebooks/stations/login.txt`. Pokud obsahuje realne prihlasovaci udaje, patri mimo verzovani nebo do ignorovane privatni slozky.
+
+Pozor: `.gitignore` obsahuje `*/token.txt` a pravdepodobne preklep `*/login.tx`; pro login soubory ma byt nejspis `*/login.txt`.
 
 ## LaTeX
 
@@ -308,19 +325,22 @@ V aktualnim stromu jsou videt hlavne vygenerovane vystupy.
 Projekt deklaruje:
 
 - `requests` - HTTP komunikace s CDDIS,
-- `paramiko` - SSH/SFTP klient,
-- `unlzw3` - dekomprese UNIX `.Z`,
 - `pandas` - prace s tabulkami,
+- `numpy` - numericke vypocty a vektorove operace,
 - `tqdm` - progress bary,
+- `unlzw3` - dekomprese UNIX `.Z`,
+- `paramiko` - SSH/SFTP klient,
 - `astropy` - casove skaly a souradnicove transformace.
-
-Kod dale pouziva `numpy` a `matplotlib`/`matplotlib.ticker`; `numpy` typicky prijde jako zavislost `pandas`/`astropy`, ale pro reprodukovatelnost by stalo za zvazeni explicitni uvedeni.
+- `scipy` - statisticke a numericke metody,
+- `matplotlib` - grafy a vizualizace,
+- `jupyter` - notebookove prostredi,
+- `ipykernel` - Python kernel pro notebooky.
 
 ### `.gitignore`
 
 Obsahuje standardni Python/Jupyter ignorovani vcetne virtualnich prostredi, cache, build vystupu a `.ipynb_checkpoints`.
 
-Poznamka: posledni pravidlo je `*/login.tx`, pravdepodobne preklep misto `*/login.txt`.
+Obsahuje take ignorovani `data/`, `*/token.txt` a pravidlo `*/login.tx`, ktere je pravdepodobne preklep misto `*/login.txt`.
 
 ## Datove toky
 
@@ -362,6 +382,15 @@ station time series
   -> CSV / LaTeX / plot exports
 ```
 
+### Spectral analysis
+
+```text
+station time series
+  -> spectral_analysis.ipynb
+  -> planned periodogram / peak detection helpers
+  -> spectral diagnostics and plots
+```
+
 ### Orbit analysis
 
 ```text
@@ -400,7 +429,7 @@ Nejdulezitejsi funkce pro pouziti z notebooku nebo skriptu:
 1. Opravit zbyly docstring v `src/doris/output/plots/plot_settings.py`, kde je stale priklad importu pres `app`.
 2. Opravit `.gitignore` pravidlo `*/login.tx` na `*/login.txt` a zvazit ignorovani `private/`, `data/` a notebookovych login souboru.
 3. Rozhodnout, zda maji byt `data/` a `LaTeX/build/` verzovane, nebo brane jako generovane artefakty.
-4. Doplnit `requirements.txt` o explicitni `numpy` a `matplotlib`, pokud ma byt prostredi reprodukovatelne z jednoho souboru.
+4. Dopsat obsah do `src/doris/analysis/spectral/periodogram.py` a `peaks.py`, nebo je odstranit, pokud zatim nemaji byt soucasti API.
 5. Dopsat minimalni `README.md`: instalace, nastaveni `PYTHONPATH=src`, autentizace a zakladni priklady.
 6. Pridat testy pro:
    - filtrovani nazvu souboru,

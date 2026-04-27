@@ -207,8 +207,9 @@ marimo/_lsp/
 __marimo__/
 
 # Private data
-*/token.txt
-*/login.tx
+**/token.txt
+**/login.txt
+**/login_ssh.txt
 
 # Data files
 data/

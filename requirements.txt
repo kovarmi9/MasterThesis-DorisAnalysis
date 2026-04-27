@@ -1,6 +1,11 @@
-requests
-paramiko
-unlzw3
-pandas
-tqdm
-astropy
+requests    # HTTP communication with CDDIS archive
+pandas      # tabular data processing (time series, DataFrames)
+numpy       # numerical arrays and vectorized computations
+tqdm        # progress bars for downloads and loops
+unlzw3      # decompression of .Z archive files
+paramiko    # SSH/SFTP access for remote data transfer
+astropy     # time systems and coordinate transformations
+scipy       # statistical methods and numerical algorithms
+matplotlib  # plotting and visualization of results
+jupyter     # notebook environment for analysis workflows
+ipykernel   # Python kernel for running notebooks
