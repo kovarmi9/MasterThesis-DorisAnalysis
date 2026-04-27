@@ -1,0 +1,6 @@
+requests
+paramiko
+unlzw3
+pandas
+tqdm
+astropy
