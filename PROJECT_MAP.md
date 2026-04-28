@@ -1,14 +1,17 @@
 # Mapa projektu
 
-Tento dokument popisuje aktualni strukturu projektu `MasterThesis-DorisAnalysis`, hlavni moduly a datove toky. Projekt je ted baleny pod Python package `doris` a pokryva nacitani DORIS dat, stanicni trendovou analyzu, pripravenou spectralni analyzu, praci s orbitami ve formatu SP3 a pomocne vystupy pro grafy/tabulky.
+Tento dokument popisuje aktualni strukturu projektu `MasterThesis-DorisAnalysis`.
+Projekt je Python knihovna balena jako package `doris` ve slozce `src/`.
+Hlavni cil je nacitani a analyza DORIS dat: stanicni casove rady, spektralni analyza
+a prace s orbitami ve formatu SP3.
 
-## Rychly prehled
+## Rychly prehled stromu
 
 ```text
 MasterThesis-DorisAnalysis/
 +-- README.md
++-- pyproject.toml
 +-- requirements.txt
-+-- LICENSE
 +-- PROJECT_MAP.md
 +-- src/
 |   +-- doris/
@@ -30,412 +33,617 @@ MasterThesis-DorisAnalysis/
 |           +-- plots/
 +-- notebooks/
 |   +-- stations/
-|       +-- download_cddis.ipynb
-|       +-- spectral_analysis.ipynb
-|       +-- trend_detection.ipynb
+|   +-- satellites/
+|   +-- tests/
 +-- data/
-|   +-- stcd/gop25wd04/
 +-- LaTeX/
-    +-- build/
 ```
 
-## Hlavni casti projektu
+## Jak cist `src`
 
-### `src/doris/`
+Nejrychlejsi orientace:
 
-Hlavni Python balicek. Importy v projektu maji smerovat na `doris...`, napr.:
+1. `src/doris/input/` resi, odkud se data vezmou a kam se ulozi.
+2. `src/doris/analysis/stations/` a `src/doris/analysis/spectral/` resi stanicni casove rady.
+3. `src/doris/analysis/orbits/` resi SP3 orbity: vyber souboru, parsovani, jednotky, interpolaci, RTN a porovnani.
+4. `src/doris/output/plots/` obsahuje male pomocniky pro jednotny vzhled grafu.
+5. `src/doris/_utils/` obsahuje sdilene funkce pouzite napric vstupnimi workflow.
+
+Importy maji smerovat na package `doris`, napr.:
 
 ```python
 from doris.input.cddis import download_from_cddis
-from doris.analysis.stations.trend import fit_linear_trend
+from doris.analysis.stations.trend import fit_piecewise_trend
+from doris.analysis.orbits import load_orbit_dataframe, compare_trajectories
 ```
 
-Aktualne obsahuje:
+## `src/doris/_utils`
 
-- vstupni workflow pro CDDIS, SSH a lokalni slozky,
-- sdilene utility pro cesty a dekompresi,
-- stanicni trendovou analyzu,
-- placeholder moduly pro spectralni analyzu,
-- orbitni loading/interpolaci/porovnani/transformace,
-- pomocniky pro nastaveni os grafu.
+Sdilene utility, ktere nejsou vazane na konkretni zdroj dat.
 
-### `src/doris/_utils/`
+### `_paths.py`
 
-Sdilene utility pouzivane vice castmi projektu.
+Resi jednotne filtrovani a vystupni cesty pro lokalni/SSH workflow.
 
-- `_paths.py`
-  - `matches_filters()` kontroluje, zda nazev souboru odpovida filtru `solution` a `satellite`.
-  - `build_local_path()` sklada vystupni cestu ve tvaru `local_dir/solution/satellite/filename`.
-  - Pri filtrovani ignoruje kompresni koncovky `.gz` a `.Z`.
+- `matches_filters(name, solution=None, satellite=None)` kontroluje, zda nazev souboru odpovida zadanemu reseni a satelitu.
+- Pri filtrovani ignoruje kompresni koncovky `.gz` a `.Z`, aby filtr pracoval se skutecnym datovym nazvem.
+- `build_local_path(local_dir, filename, solution=None, satellite=None)` sklada cilovou cestu ve tvaru `local_dir/solution/satellite/filename`, pokud jsou tyto casti zadane.
 
-- `_decompress.py`
-  - `decompress_file()` dekomprimuje jeden soubor.
-  - `decompress_many()` dekomprimuje vice souboru.
-  - Podporuje `.Z` pres `unlzw3` a `.gz` pres standardni `gzip`.
-  - Pri neuspechu pouziva vlastni vyjimku `DecompressionError`.
+### `_decompress.py`
 
-## Vstupy
+Spolecna dekomprese komprimovanych vstupu.
 
-### `src/doris/input/cddis/`
+- `decompress_file(path, keep_compressed=False, overwrite=True)` dekomprimuje jeden soubor.
+- `decompress_many(paths, ...)` vola dekompresi pro vice souboru.
+- Podporuje `.Z` pres `unlzw3` a `.gz` pres standardni `gzip`.
+- Pokud vstup neni podporovany nebo dekomprese selze, pouziva `DecompressionError`.
 
-Workflow pro NASA CDDIS archiv.
+## `src/doris/input`
 
-- `_config.py`
-  - Definuje `AuthConfig`, `CddisRequest`, `DownloadOptions`, `DecompressOptions`, `LoadConfig`.
-  - `CddisRequest` sklada relativni datasetovou cestu, napr. `stcd/gop25wd04`.
+Vstupni cast sjednocuje tri zpusoby ziskani dat: NASA CDDIS, SSH/SFTP a lokalni kopii.
+Vsechny workflow maji podobny tvar: najit soubory, filtrovat, ulozit do lokalni struktury
+a volitelne dekomprimovat.
 
-- `_authentication.py`
-  - Resi Earthdata autentizaci.
-  - Poradi zdroju prihlaseni: `token.txt`, `login.txt`, interaktivni prompt.
-  - Pripravuje `requests.Session` a umi zapsat Windows-friendly `_netrc`.
+### `input/cddis`
 
-- `_client.py`
-  - Sklada CDDIS URL.
-  - Stahuje `MD5SUMS`.
-  - Parsuje seznam archivnich `.Z` souboru z `MD5SUMS`.
-  - Stahuje soubory sekvencne nebo paralelne pres `ThreadPoolExecutor`.
-  - Detekuje HTML/login odpoved misto datoveho souboru.
+Workflow pro NASA CDDIS archiv a Earthdata autentizaci.
 
-- `workflow.py`
-  - Hlavni API: `run_cddis_workflow(cfg)`, `download_from_cddis(...)`.
-  - Provede autentizaci, stazeni datasetu a volitelnou dekompresi.
-  - Vraci `CddisWorkflowResult`.
+#### `_config.py`
 
-### `src/doris/input/ssh/`
+Konfiguracni dataclassy:
 
-Workflow pro stahovani dat pres SSH/SFTP.
+- `AuthConfig` urcuje `token_file`, `login_file`, interaktivni prihlaseni a ukladani loginu.
+- `CddisRequest` popisuje dataset: `technique`, `subtree`, `product`, `solution`, volitelny `satellite`, `archive_root` a `output_root`.
+- `CddisRequest.relative_dataset_path` sklada cestu typu `stcd/gop25wd04` nebo `orbits/ssa/srl`.
+- `DownloadOptions` ridi overwrite, vytvareni adresaru, timeouty, retry, `MD5SUMS`, paralelni download a `max_workers`.
+- `DecompressOptions` ridi, zda dekomprimovat, ponechat komprimovany soubor a prepisovat vystup.
+- `LoadConfig` spojuje request, autentizaci, download a dekompresi do jednoho objektu.
 
-- `_config.py`
-  - Definuje `SshConfig`, `SshAuthOptions`, `SshDownloadRequest`, `SshDecompressOptions`.
+#### `_authentication.py`
 
-- `_authentication.py`
-  - Resi SSH heslo z primo predaneho hesla, `login_ssh.txt`, nebo interaktivniho promptu.
-  - Umi prihlasovaci udaje ulozit po uspesnem pouziti.
+Resi Earthdata prihlaseni.
 
-- `_client.py`
-  - Obaluje `paramiko.SSHClient` a `SFTPClient`.
-  - Umi se pripojit, vypsat adresar, filtrovat soubory a stahovat soubory.
+- Hleda token v `token.txt`.
+- Hleda username/password v `login.txt`.
+- Pri povolene interakci umi vyzvat k prihlaseni.
+- Vytvari `requests.Session`.
+- Umi nastavit bearer token nebo username/password pres `.netrc`/`_netrc`.
+- Verejne dulezite funkce: `get_authenticated_session()`, `resolve_auth()`, `describe_auth_source()`.
 
-- `workflow.py`
-  - Hlavni API: `run_ssh_workflow(...)`, `download_from_ssh(...)`.
-  - Filtruje podle patternu, `solution`, `satellite` a volitelne dekomprimuje.
-  - Vraci `SshDownloadResult`.
+#### `_client.py`
 
-### `src/doris/input/local/`
+Nizsi HTTP klient pro archiv.
 
-Workflow pro kopirovani souboru z lokalni slozky.
+- `build_dataset_url()` sklada URL z `CddisRequest`.
+- `download_md5sums()` stahuje index `MD5SUMS`.
+- `parse_md5sums_for_archives()` z indexu vybere archivni `.Z` soubory.
+- `fetch_dataset_index()` vraci `DatasetIndex` s URL, cestou k MD5 a seznamem souboru.
+- `download_dataset_archives()` stahuje archivni soubory sekvencne nebo paralelne.
+- Stazeni kontroluje, jestli misto dat neprisla HTML/login odpoved.
 
-- `_config.py`
-  - Definuje `LocalCopyRequest` a `LocalDecompressOptions`.
+#### `workflow.py`
 
-- `_client.py`
-  - `list_files()` vypise soubory v lokalnim adresari.
-  - `copy_file()` kopiruje soubor na cilovou cestu.
+Vysoka vrstva pro pouziti z notebooku.
 
-- `workflow.py`
-  - Hlavni API: `run_local_workflow(...)`, `copy_from_local(...)`.
-  - Filtruje soubory podle patternu, `solution`, `satellite`, kopiruje je a volitelne dekomprimuje.
-  - Vraci `LocalCopyResult`.
+- `run_cddis_workflow(cfg)` provede autentizaci, nacte index, stahne soubory a volitelne je dekomprimuje.
+- `download_from_cddis(...)` je ploche pohodlne API bez nutnosti rucne skladat config objekty.
+- `CddisWorkflowResult` obsahuje `dataset_index`, `downloaded_paths` a `decompressed_paths`.
 
-## Analyza stanic
+#### `__init__.py`
 
-### `src/doris/analysis/stations/`
+Re-exportuje hlavni konfigurace a workflow, takze v notebooku staci:
 
-Moduly pro fitovani trendu stanicnich casovych rad.
+```python
+from doris.input.cddis import download_from_cddis
+```
 
-- `_ls.py`
-  - `fit_ols()` pro nevazeny linearni fit.
-  - `fit_wls()` pro vazeny linearni fit s vahami `1 / sigma**2`.
-  - Vysledek drzi `FitResult` se sklonem, interceptem, RSS/WRSS, `r2`, rozsahem `x` a poctem bodu.
+### `input/ssh`
 
-- `_bic.py`
-  - `bic_from_rss()` pocita BIC z RSS, poctu bodu a poctu parametru.
+Workflow pro stahovani souboru pres SSH/SFTP.
 
-- `trend.py`
-  - `fit_linear_trend()` pro jeden linearni trend.
-  - `fit_piecewise_trend()` pro BIC-vybirany po castech linearni trend.
-  - Podporuje OLS/WLS, breakpoints, residualy, fitted hodnoty, export do DataFrame a segmentove summary.
-  - Hlavni vysledky jsou `TrendResult` a `SegmentResult`.
+#### `_config.py`
 
-### `src/doris/analysis/spectral/`
+- `SshConfig` drzi host, port, username, heslo nebo private key a nastaveni host keys.
+- `SshAuthOptions` drzi `login_ssh.txt`, interaktivni prihlaseni a ukladani loginu.
+- `SshDownloadRequest` popisuje remote/local adresare, `filename_pattern`, `solution`, `satellite` a overwrite.
+- `SshDecompressOptions` ridi dekompresi stejne jako u ostatnich vstupu.
 
-Pripravena cast pro spectralni analyzu stanicnich casovych rad.
+#### `_authentication.py`
 
-- `periodogram.py`
-  - Aktualne prazdny placeholder pro periodogram / frekvencni analyzu.
+- `resolve_ssh_auth()` vybere heslo z argumentu, `login_ssh.txt`, nebo promptu.
+- `read_login_file()` a `save_login_file()` cte/uklada SSH prihlaseni.
+- `ResolvedSshAuth` uklada username, password a zdroj prihlaseni.
 
-- `peaks.py`
-  - Aktualne prazdny placeholder pro detekci spektralnich spickek.
+#### `_client.py`
 
-## Analyza orbit
+- Obaluje `paramiko.SSHClient` a `SFTPClient`.
+- `SshClient` funguje jako context manager.
+- `list_files()` vraci `RemoteEntry` pro soubory v remote adresari.
+- `download_file()` stahuje remote soubor na lokalni cestu.
+- Definuje vlastni chyby: `SshConnectionError`, `SshAuthenticationError`, `SshRemotePathError`.
 
-### `src/doris/analysis/orbits/loading/`
+#### `workflow.py`
 
-Nacitani, cisteni a normalizace SP3 orbitnich souboru.
+- `download_from_ssh(...)` je hlavni notebookove API.
+- `run_ssh_workflow(config, request, decompress_options)` je nizsi API nad config objekty.
+- Soubor se ulozi pres `build_local_path()`, tedy volitelne do `local_dir/solution/satellite/`.
+- Po stazeni muze workflow dekomprimovat `.Z`/`.gz`; chyby dekomprese u jednotlivych souboru jen zaloguje a pokracuje.
+- `SshDownloadResult` poskytuje pocty `count`, `count_downloaded`, `count_skipped_existing`, `count_decompressed`.
 
-- `load_to_df.py`
-  - `load_orbit_dataframe()` nacte casovy rozsah do jednoho DataFrame.
-  - `load_orbit_day()` nacte jeden den.
-  - `iter_orbit_days()` iteruje po dnech.
+### `input/local`
 
-- `_filename_parsers.py`
-  - Parsuje filename metadata pro CDDIS `bYYDDD/eYYDDD` a GOP `provider_satellite_YYMMDD_YYMMDD_Vxx.sp3`.
-  - Vraci `FilenameInfo`.
+Workflow pro kopirovani souboru z lokalni slozky do projektove datove struktury.
 
-- `_orbit_file_selection.py`
-  - `select_orbit_files_for_period()` vybira soubory prekryvajici pozadovane obdobi.
-  - `select_file_for_day()` vybira nejvhodnejsi soubor pro konkretni den.
+#### `_config.py`
 
-- `_sp3_reader.py`
-  - Cte SP3 pozicni a rychlostni zaznamy do pandas DataFrame.
-  - Detekuje time scale, coordinate system a uklada metadata do `df.attrs`.
+- `LocalCopyRequest` popisuje `source_dir`, `local_dir`, pattern, `solution`, `satellite` a overwrite.
+- `LocalDecompressOptions` ridi dekompresi.
 
-- `_convert_trajectory_units.py`
-  - Prevadi pozice/rychlosti na `m` a `m/s`.
-  - Prevadi casove skaly mezi `TAI`, `UTC`, `GPS` s pomoci `astropy`.
+#### `_client.py`
 
-- `_deduplicate.py`
-  - Odstranuje duplicitni epochy podle casoveho sloupce a pripadne satelitu.
-  - Podporuje strategie `first`, `last`, `mean`.
+- `list_files(source_dir, filename_pattern=None)` vraci soubory jako `LocalEntry`.
+- `copy_file(source_path, local_path, overwrite=True)` kopiruje jeden soubor a vraci, zda se opravdu kopiroval.
 
-- `_coverage.py`
-  - Kontroluje navaznost pokryti sousednich orbitnich souboru podle nazvu.
-  - Reportuje gaps/touching/overlaps.
+#### `workflow.py`
 
-- `_continuity.py`
-  - Kontroluje casovou pravidelnost nactene trajektorie podle ocekavaneho kroku.
-  - Reportuje duplicity, mezery a nepravidelne kroky.
+- `copy_from_local(...)` je pohodlne API pro notebooky.
+- `run_local_workflow(...)` vybere soubory, profiltuje je pres `matches_filters()`, zkopiruje a volitelne dekomprimuje.
+- `LocalCopyResult` poskytuje pocty `count`, `count_copied`, `count_skipped_existing`, `count_decompressed`.
 
-### `src/doris/analysis/orbits/interpolate/`
+## `src/doris/analysis/stations`
 
-Interpolace orbitnich trajektorii.
+Moduly pro trendovou analyzu stanicnich casovych rad.
 
-- `hermite.py`
-  - `hermite_at_time()` provadi Hermitovu interpolaci polohy z casu, pozic a rychlosti.
-  - Podporuje vstup `(t, r, v)`, sedm vektoru, nebo matici `(N, 7)`.
+### `_ls.py`
 
-- `interpolate.py`
-  - `interpolate_trajectory_to_reference()` interpoluje zdrojovou trajektorii na epochy referencniho DataFrame.
-  - `interpolate_like()` je zpetne kompatibilni alias.
+Nizsi linearni fit.
 
-### `src/doris/analysis/orbits/track/`
+- `FitResult` uklada `slope`, `intercept`, RSS/WRSS, `r2`, pocet bodu a rozsah `x`.
+- `fit_ols(x, y)` dela nevazeny linearni fit.
+- `fit_wls(x, y, sigma)` dela vazeny fit s vahami `1 / sigma**2`.
+
+### `_bic.py`
+
+- `bic_from_rss(n, rss, k=2)` pocita Bayesovo informacni kriterium pro porovnani modelu.
+
+### `trend.py`
+
+Hlavni stanicni trendova logika.
+
+- `fit_linear_trend(x, y, sigma=None, ...)` fituje jeden linearni trend.
+- `fit_piecewise_trend(x, y, sigma=None, ...)` hleda po castech linearni trend a vybira split podle BIC.
+- `SegmentResult` reprezentuje jeden segment trendu.
+- `TrendResult` reprezentuje cely vysledek vcetne segmentu, breakpointu, fitted hodnot, residualu a BIC.
+- Vysledek umi vyrabet tabulky a shrnuti segmentu pres metody objektu `TrendResult`.
+- Interni pomocne funkce resi validni masku dat, kandidaty breakpointu, fit segmentu a skore modelu.
+
+Typicky tok:
+
+```text
+station series
+  -> fit_linear_trend() nebo fit_piecewise_trend()
+  -> OLS/WLS segmenty
+  -> BIC vyber breakpointu
+  -> fitted hodnoty, residualy, segment summaries
+```
+
+## `src/doris/analysis/spectral`
+
+Spektralni analyza casovych rad.
+
+### `periodogram.py`
+
+- `compute_periodogram(...)` je verejny wrapper.
+- `compute_fft_periodogram(...)` pocita jednostranny FFT periodogram.
+- Vystup obsahuje `frequency`, `period`, `amplitude`, `power`, `phase_rad`.
+- Volitelne omezuje periody pomoci `min_period` a `max_period`.
+
+### `peaks.py`
+
+- `select_periodogram_peaks(periodogram_df, ...)` vybira lokalni peaky.
+- Pouziva `scipy.signal.find_peaks`.
+- Slouzi pro vytazeni dominantnich period z periodogramu.
+
+### `__init__.py`
+
+Re-exportuje:
+
+- `compute_periodogram`
+- `compute_fft_periodogram`
+- `select_periodogram_peaks`
+
+## `src/doris/analysis/orbits`
+
+Nejvetsi cast projektu. Resi SP3 data od vyberu souboru az po porovnani dvou orbitnich trajektorii.
+
+Hlavni datovy tok:
+
+```text
+SP3 files
+  -> loading/select_orbit_files_for_period()
+  -> loading/read_sp3_files_to_dataframe()
+  -> loading/deduplicate_orbit_epochs()
+  -> loading/convert_trajectory_units()
+  -> optional coverage/continuity inspection
+  -> optional transform_itrf_to_gcrs()
+  -> interpolate/interpolate_trajectory_to_reference()
+  -> compare/compare_trajectories()
+  -> compare/orbit_diff_stats(), orbit_diff_summary()
+```
+
+### `orbits/loading`
+
+Nacitani, vyber, cisteni a normalizace SP3 orbit.
+
+#### `load_to_df.py`
+
+Vysoka vrstva pro nacteni orbit do pandas DataFrame.
+
+- `load_orbit_dataframe(source, start, end, ...)` nacte casovy rozsah.
+- `load_orbit_day(source, day, window=0.0, ...)` nacte jeden den a oreze ho na denni okno.
+- `iter_orbit_days(source, start, end, skip_missing=True, **kwargs)` iteruje po dnech.
+- Pri nacitani vola vyber souboru, parsovani SP3, deduplikaci, volitelnou normalizaci jednotek a volitelne kontroly pokryti/casove pravidelnosti.
+- Metadata o nacitani uklada do `df.attrs["load_to_df"]`.
+
+#### `_filename_parsers.py`
+
+Parsuje metadata z nazvu souboru.
+
+- `FilenameInfo` drzi `path`, `start`, `end`, `provider`, `satellite`, `version`, `scheme`.
+- `parse_cddis_filename()` zna CDDIS styl `.bYYDDD.eYYDDD.`.
+- `parse_gop_filename()` zna styl `provider_satellite_YYMMDD_YYMMDD_Vxx.sp3`.
+- `parse_filename_info()` zkusi vsechny zname parsery.
+
+#### `_orbit_file_selection.py`
+
+- `select_orbit_files_for_period(root, start, end, recursive=False)` vybere vsechny SP3 soubory, jejichz pokryti se prekryva s pozadovanym intervalem.
+- `select_file_for_day(root, day, recursive=True)` vybere nejvhodnejsi soubor pro konkretni den, prednost ma soubor s lepsim okolnim pokrytim.
+
+#### `_sp3_reader.py`
+
+SP3 parser.
+
+- `read_sp3_to_dataframe(path)` nacte jeden SP3 soubor.
+- `read_sp3_files_to_dataframe(paths)` nacte vice souboru a spoji je.
+- Parsuje epochy, `P` radky pozic a `V` radky rychlosti.
+- Vystupni sloupce jsou typicky `x`, `y`, `z`, `vx`, `vy`, `vz`, `MJD_<TIME_SCALE>` a podle situace `satellite`/`source_file`.
+- Metadata uklada do `df.attrs`: `source_files`, `time_scale`, `time_column`, `coordinate_system`, `position_unit`, `velocity_unit`.
+- Pokud je v datech jen jeden satelit, sloupec `satellite` presune do metadat.
+
+#### `_convert_trajectory_units.py`
+
+Normalizace casu a jednotek.
+
+- `convert_trajectory_units(df, target_time_scale="TAI", add_epoch=True)` prevadi pozice/rychlosti na `m` a `m/s`.
+- Detekuje vstupni casovy sloupec a casovou skalu.
+- Prevadi mezi `UTC`, `TAI` a `GPS` pomoci `astropy`.
+- Uklada aktualni jednotky a casovy sloupec do `df.attrs`.
+
+#### `_deduplicate.py`
+
+- `deduplicate_orbit_epochs(df, keep="first", compute_statistics=False)` odstranuje duplicitni epochy.
+- Klice odvozuje podle casoveho sloupce a pripadne satelitu.
+- Podporuje strategie `first`, `last`, `mean`.
+
+#### `_coverage.py`
+
+- `inspect_orbit_file_coverage(paths)` kontroluje navaznost sousednich orbitnich souboru podle pokryti z nazvu.
+- Vystup popisuje `gap`, `touching` nebo `overlap`.
+- Souhrn uklada do `df.attrs["coverage_summary"]`.
+
+#### `_continuity.py`
+
+- `inspect_orbit_time_series(df, expected_step_seconds=60)` kontroluje casovou pravidelnost nactene trajektorie.
+- Hleda duplicity, mezery a nepravidelne kroky.
+- Souhrn uklada do `df.attrs["time_series_summary"]`.
+
+#### `__init__.py`
+
+Verejne z loading package exportuje:
+
+- `load_orbit_dataframe`
+- `load_orbit_day`
+- `iter_orbit_days`
+- `select_orbit_files_for_period`
+- `select_file_for_day`
+
+### `orbits/interpolate`
+
+Interpolace trajektorii na referencni epochy.
+
+#### `hermite.py`
+
+Implementace Hermitovy interpolace polohy z casu, poloh a rychlosti.
+
+- `hermite_at_time(data, t_query, degree=11, ...)` je hlavni funkce.
+- Podporovane vstupy:
+  - `(t, r, v)`
+  - `(t, x, y, z, vx, vy, vz)`
+  - matice `(N, 7)` jako `[t, x, y, z, vx, vy, vz]`
+- Stupen musi byt lichy; pocet uzlu je `(degree + 1) // 2`.
+- Funkce vraci jen interpolovanou polohu, ne rychlost.
+- Interni `lagrange_basis()`, `lagrange_basis_deriv_at_nodes()` a `hermite_interpolate()` skladaji klasicky Hermituv polynom.
+
+#### `interpolate.py`
+
+Pandas wrapper nad Hermitovou interpolaci.
+
+- `interpolate_trajectory_to_reference(df_source, df_reference, method="hermite", degree=11, time_col=None, ...)` interpoluje zdrojovou trajektorii na epochy referencniho DataFrame.
+- Automaticky hleda spolecny casovy sloupec z `t_sec_round`, `t_sec`, `MJD_TAI`, `MJD_GPS`, pokud neni zadany.
+- Vyzaduje ve zdroji `x`, `y`, `z`, `vx`, `vy`, `vz`.
+- Vystup obsahuje interpolovane `x`, `y`, `z`; `vx`, `vy`, `vz` jsou zatim `NaN`, protoze backend vraci pouze polohu.
+- `interpolate_like()` je zpetne kompatibilni alias.
+
+### `orbits/track`
 
 Prace s lokalnim RTN ramcem.
 
-- `_rtn_frame.py`
-  - `build_rtn_frame()` sklada radial/tangential/normal jednotkove vektory.
-  - `project_to_rtn()` projektuje XYZ rozdily do slozek `dR`, `dT`, `dN`.
+#### `_rtn_frame.py`
 
-### `src/doris/analysis/orbits/compare/`
+- `build_rtn_frame(position, velocity)` vytvori jednotkove vektory radial/tangential/normal.
+- Radial je smer `r / ||r||`.
+- Normal je smer orbitalniho momentu `r x v`.
+- Tangential je `N x R`.
+- `project_to_rtn(diff_xyz, position, velocity)` projektuje XYZ rozdily do `dR`, `dT`, `dN`.
 
-Porovnani dvou orbitnich trajektorii.
+### `orbits/compare`
 
-- `compare.py`
-  - `compare_trajectories()` interpoluje trajektorii A na epochy trajektorie B.
-  - Vraci rozdily v XYZ, normu a volitelne RTN slozky.
-  - Uklada zakladni statistiky do `df.attrs`.
+Porovnani dvou orbit.
 
-- `stats.py`
-  - `orbit_diff_stats()` pocita mean/RMS/RMS0 pro RTN slozky.
-  - `orbit_diff_summary()` sklada denni summary tabulku.
+#### `compare.py`
 
-### `src/doris/analysis/orbits/transform/`
+- `compare_trajectories(df_a, df_b, time_col="t_sec", degree=11, edge_trim=10, rtn=True, unit="mm")`.
+- Interpoluje trajektorii A na epochy trajektorie B.
+- Oreze okraje referencni trajektorie podle `edge_trim`, aby se omezily okrajove efekty interpolace.
+- Pocita rozdily `ref - interp`, normu rozdilu a volitelne RTN slozky.
+- Podle `unit` vraci rozdily v metrech nebo milimetrech.
+- Souhrnne statistiky uklada do `result.attrs`.
 
-Transformace souradnicovych systemu.
+#### `stats.py`
 
-- `itrf_transform.py`
-  - `transform_itrf_to_gcrs()` transformuje trajektorii z ITRF/ITRS/IGS do GCRS pomoci `astropy`.
+- `orbit_diff_stats(diff_df)` pocita mean, RMS a RMS0 pro `dR_m`, `dT_m`, `dN_m`.
+- `orbit_diff_summary(results)` sklada denni summary tabulku z dictionary `day -> diff_df`.
 
-- `ITRF2GCRF.ipynb`
-  - Notebook pro praci/experimenty s transformaci ITRF -> GCRF/GCRS.
+### `orbits/transform`
 
-## Vystupy
+Transformace souradnic.
 
-### `src/doris/output/plots/`
+#### `itrf_transform.py`
 
-Pomocne funkce pro jednotne osy grafu.
+- `transform_itrf_to_gcrs(df)` prevadi trajektorii z ITRF/ITRS/IGS do GCRS pomoci `astropy`.
+- Detekuje casovy sloupec a casovou skalu z DataFrame.
+- Vyzaduje pozicni sloupce `x`, `y`, `z`.
+- Vystup ponechava DataFrame tvar a aktualizuje metadata souradnicoveho systemu.
 
-- `_scale.py`
-  - `uniform_y_scale_policy()` sjednocuje rozsah a tick step pro vice subplotu.
-  - `set_unit_ticks()` nastavuje jednotne X tick spacing.
+#### `ITRF2GCRF.ipynb`
 
-- `plot_settings.py`
-  - Verejny re-export plot scale helperu.
-  - Poznamka: docstring stale ukazuje priklad `from app.output.plots ...`; pokud se bude cistit dokumentace, ma byt `from doris.output.plots ...`.
+Experimentacni notebook pro transformaci ITRF -> GCRF/GCRS.
+
+### `orbits/__init__.py`
+
+Hlavni orbitni API exportuje napric podbalicky:
+
+- `load_orbit_dataframe`, `load_orbit_day`, `iter_orbit_days`
+- `hermite_at_time`, `interpolate_trajectory_to_reference`, `interpolate_like`
+- `transform_itrf_to_gcrs`
+- `build_rtn_frame`, `project_to_rtn`
+- `compare_trajectories`, `orbit_diff_stats`, `orbit_diff_summary`
+
+## `src/doris/output/plots`
+
+Pomocne funkce pro konzistentni osy grafu.
+
+### `_scale.py`
+
+- `uniform_y_scale_policy(...)` sjednocuje y rozsah a tick step pro vice os/subplotu.
+- `set_unit_ticks(...)` nastavuje jednotny spacing ticku na x ose.
+- Interni `_nice_step()` vybira lidsky citelny krok ticku.
+
+### `plot_settings.py` a `__init__.py`
+
+Re-exportuji `set_unit_ticks` a `uniform_y_scale_policy`.
+
+Poznamka: v `plot_settings.py` je stale docstring s prikladem importu pres `app.output.plots`; pri dalsim cisteni dokumentace by mel byt zmenen na `doris.output.plots`.
 
 ## Notebooky
 
+Notebooky jsou prakticka vrstva nad `src`.
+
 ### `notebooks/stations/download_cddis.ipynb`
 
-Notebook pro stazeni DORIS STCD dat z CDDIS.
-
-Aktualni logika:
-
-1. Najde root projektu podle existence `src/doris`.
-2. Prida `src` do `sys.path`.
-3. Importuje `download_from_cddis` z `doris.input.cddis`.
-4. Stahuje dataset `doris/products/stcd/gop25wd04`.
-5. Pouziva paralelni download (`max_workers=16`) a dekompresi.
-6. Vypisuje URL datasetu, `MD5SUMS`, pocet archivu, stazenych a dekomprimovanych souboru.
+Stahuje DORIS STCD data z CDDIS pres `doris.input.cddis`.
+Typicky pouziva dataset `doris/products/stcd/gop25wd04`, paralelni download a dekompresi.
 
 ### `notebooks/stations/spectral_analysis.ipynb`
 
-Notebook pro rozpracovanou spectralni analyzu stanicnich casovych rad. Navazuje na stanicni STCD data a zatim ma oporu v prazdnych modulech `src/doris/analysis/spectral/periodogram.py` a `peaks.py`.
+Navazuje na stanicni STCD data a pouziva `doris.analysis.spectral` pro FFT periodogram a vyber period.
 
 ### `notebooks/stations/trend_detection.ipynb`
 
-Notebook pro stanicni trendovou analyzu nad STCD daty. Podle struktury vystupu v `data/stcd/gop25wd04/exports/licb/` pracuje s vybranou stanici `licb`, exportuje vyrezana data, detrendovane rady a trendove tabulky.
+Trendova analyza stanicnich dat. Pracuje s vybranou stanici, vyrabi detrendovane rady, trendove tabulky a grafy.
+
+### `notebooks/satellites/download_cddis.ipynb`
+
+Stahovani satelitnich/orbitnich dat z CDDIS.
+
+### `notebooks/satellites/download_local.ipynb`
+
+Kopirovani orbitnich dat z lokalni slozky pres `doris.input.local`.
+
+### `notebooks/satellites/download_ssh.ipynb`
+
+Stahovani orbitnich dat pres SSH/SFTP pres `doris.input.ssh`.
+
+### `notebooks/tests/hermite_interpolation_accuracy.ipynb`
+
+Validacni notebook pro presnost Hermitovy interpolace orbit.
 
 ## Data a soukrome soubory
 
-### `data/stcd/gop25wd04/`
+### `data/`
 
-Lokalni data stazena z CDDIS:
+Lokalni pracovni data. Slozka je ignorovana pres `.gitignore`.
 
-- `MD5SUMS`,
-- mnoho souboru `gop25wd04.stcd.<station>`,
-- `images/licb/` s PDF grafy pro stanici `licb`,
-- `exports/licb/` s CSV a LaTeX tabulkami pro trendove varianty.
+Typicke casti:
 
-Poznamka: `data/` je v `.gitignore`, takze jde o lokalni pracovni data, ne nutne o verzovanou cast repozitare.
+- `data/stcd/gop25wd04/` pro stanicni STCD data, exporty a grafy.
+- `data/orbits/` pro orbitni data podle zdroju a satelitu.
+- `data/amalie_sp3_2024/` pro SP3 data clenena podle poskytovatele/satelitu.
 
-### Soukrome prihlasovaci soubory
+### Prihlasovaci soubory
 
-V aktualnim stromu je `notebooks/stations/login.txt`. Pokud obsahuje realne prihlasovaci udaje, patri mimo verzovani nebo do ignorovane privatni slozky.
+Workflow umi cist:
 
-Pozor: `.gitignore` obsahuje `*/token.txt` a pravdepodobne preklep `*/login.tx`; pro login soubory ma byt nejspis `*/login.txt`.
+- `token.txt` pro Earthdata token,
+- `login.txt` pro Earthdata username/password,
+- `login_ssh.txt` pro SSH username/password.
+
+`.gitignore` obsahuje pravidla pro `**/token.txt`, `**/login.txt` a `**/login_ssh.txt`.
 
 ## LaTeX
 
+### `LaTeX/images/`
+
+Obrazove podklady a vysledky pro text prace:
+
+- loga CVUT,
+- zadani,
+- validacni grafy pro testy Hermitovy interpolace.
+
 ### `LaTeX/build/`
 
-Adresar obsahuje build artefakty LaTeX dokumentu:
+Build artefakty LaTeX dokumentu, pokud jsou v lokalnim stromu vytvorene:
 
 - `main.pdf`,
 - `.aux`, `.bbl`, `.blg`, `.log`, `.toc`, `.lof`, `.lot`, `.out`,
 - `main.synctex.gz`,
 - pomocne soubory pro kapitoly/prilohy.
 
-V aktualnim stromu jsou videt hlavne vygenerovane vystupy.
-
 ## Konfigurace a zavislosti
+
+### `pyproject.toml`
+
+Projekt je balen pres setuptools:
+
+- package name: `doris-analysis`
+- Python: `>=3.10`
+- zdrojovy layout: `package-dir = {"" = "src"}`
+- package discovery: `where = ["src"]`
 
 ### `requirements.txt`
 
-Projekt deklaruje:
+Zavislosti projektu:
 
-- `requests` - HTTP komunikace s CDDIS,
-- `pandas` - prace s tabulkami,
-- `numpy` - numericke vypocty a vektorove operace,
-- `tqdm` - progress bary,
-- `unlzw3` - dekomprese UNIX `.Z`,
-- `paramiko` - SSH/SFTP klient,
-- `astropy` - casove skaly a souradnicove transformace.
-- `scipy` - statisticke a numericke metody,
-- `matplotlib` - grafy a vizualizace,
-- `jupyter` - notebookove prostredi,
-- `ipykernel` - Python kernel pro notebooky.
+- `requests` pro HTTP komunikaci s CDDIS,
+- `paramiko` pro SSH/SFTP,
+- `unlzw3` pro `.Z` dekompresi,
+- `pandas` a `numpy` pro tabulky a vypocty,
+- `tqdm` pro progress bary,
+- `astropy` pro casove skaly a transformace souradnic,
+- `scipy` pro spektralni peaky a numeriku,
+- `matplotlib` pro grafy,
+- `jupyter` a `ipykernel` pro notebooky.
 
-### `.gitignore`
+## Verejna API pro notebooky
 
-Obsahuje standardni Python/Jupyter ignorovani vcetne virtualnich prostredi, cache, build vystupu a `.ipynb_checkpoints`.
+Nejdulezitejsi importy:
 
-Obsahuje take ignorovani `data/`, `*/token.txt` a pravidlo `*/login.tx`, ktere je pravdepodobne preklep misto `*/login.txt`.
+```python
+from doris.input.cddis import download_from_cddis
+from doris.input.ssh import download_from_ssh
+from doris.input.local import copy_from_local
+
+from doris.analysis.stations.trend import fit_linear_trend, fit_piecewise_trend
+from doris.analysis.spectral import (
+    compute_periodogram,
+    compute_fft_periodogram,
+    select_periodogram_peaks,
+)
+
+from doris.analysis.orbits import (
+    load_orbit_dataframe,
+    load_orbit_day,
+    iter_orbit_days,
+    hermite_at_time,
+    interpolate_trajectory_to_reference,
+    compare_trajectories,
+    orbit_diff_stats,
+    orbit_diff_summary,
+    transform_itrf_to_gcrs,
+)
+
+from doris.output.plots import uniform_y_scale_policy, set_unit_ticks
+```
 
 ## Datove toky
 
 ### CDDIS download
 
 ```text
-LoadConfig
-  -> AuthConfig + CddisRequest + DownloadOptions + DecompressOptions
+download_from_cddis()
+  -> LoadConfig
   -> get_authenticated_session()
   -> fetch_dataset_index()
-     -> build_dataset_url()
-     -> download_md5sums()
-     -> parse_md5sums_for_archives()
+       -> build_dataset_url()
+       -> download_md5sums()
+       -> parse_md5sums_for_archives()
   -> download_dataset_archives()
-     -> sequential or parallel download
   -> optional decompress_file()
   -> CddisWorkflowResult
 ```
 
-### Local/SSH input
+### SSH/local vstup
 
 ```text
-download_from_ssh() or copy_from_local()
-  -> list files
-  -> filter by filename_pattern / solution / satellite
-  -> download or copy selected files
+download_from_ssh() / copy_from_local()
+  -> list remote/local files
+  -> filename_pattern + solution/satellite filters
+  -> build_local_path()
+  -> download/copy
   -> optional decompress_file()
-  -> SshDownloadResult or LocalCopyResult
+  -> SshDownloadResult / LocalCopyResult
 ```
 
-### STCD trend analysis
+### Stanicni trend
 
 ```text
 station time series
-  -> fit_linear_trend() or fit_piecewise_trend()
-  -> OLS/WLS segment fits
-  -> BIC model selection
-  -> fitted values + residuals + segment summaries
-  -> CSV / LaTeX / plot exports
+  -> valid mask
+  -> OLS/WLS fit
+  -> optional BIC breakpoint search
+  -> TrendResult
+  -> residuals, fitted values, segment tables
 ```
 
-### Spectral analysis
+### Spektralni analyza
 
 ```text
 station time series
-  -> spectral_analysis.ipynb
-  -> planned periodogram / peak detection helpers
-  -> spectral diagnostics and plots
+  -> compute_fft_periodogram()
+  -> period/amplitude/power/phase table
+  -> select_periodogram_peaks()
+  -> dominant periods for plots/tables
 ```
 
-### Orbit analysis
+### Orbitni porovnani
 
 ```text
-SP3 files
-  -> select_orbit_files_for_period()
-  -> read_sp3_files_to_dataframe()
-  -> deduplicate_orbit_epochs()
-  -> convert_trajectory_units()
-  -> optional continuity / coverage checks
+SP3 directories
+  -> load_orbit_dataframe()
+  -> convert units/time scale
   -> optional transform_itrf_to_gcrs()
-  -> interpolate_trajectory_to_reference()
   -> compare_trajectories()
-  -> RTN statistics
+       -> interpolate A to B epochs
+       -> XYZ differences
+       -> optional RTN projection
+  -> orbit_diff_stats()/orbit_diff_summary()
 ```
-
-## Verejna API
-
-Nejdulezitejsi funkce pro pouziti z notebooku nebo skriptu:
-
-- `doris.input.cddis.download_from_cddis(...)`
-- `doris.input.ssh.download_from_ssh(...)`
-- `doris.input.local.copy_from_local(...)`
-- `doris._utils._decompress.decompress_file(...)`
-- `doris.analysis.stations.trend.fit_linear_trend(...)`
-- `doris.analysis.stations.trend.fit_piecewise_trend(...)`
-- `doris.analysis.orbits.loading.load_orbit_dataframe(...)`
-- `doris.analysis.orbits.loading.load_orbit_day(...)`
-- `doris.analysis.orbits.interpolate.interpolate_trajectory_to_reference(...)`
-- `doris.analysis.orbits.compare.compare_trajectories(...)`
-- `doris.analysis.orbits.transform.itrf_transform.transform_itrf_to_gcrs(...)`
-- `doris.output.plots.uniform_y_scale_policy(...)`
-- `doris.output.plots.set_unit_ticks(...)`
 
 ## Co zkontrolovat jako dalsi
 
-1. Opravit zbyly docstring v `src/doris/output/plots/plot_settings.py`, kde je stale priklad importu pres `app`.
-2. Opravit `.gitignore` pravidlo `*/login.tx` na `*/login.txt` a zvazit ignorovani `private/`, `data/` a notebookovych login souboru.
-3. Rozhodnout, zda maji byt `data/` a `LaTeX/build/` verzovane, nebo brane jako generovane artefakty.
-4. Dopsat obsah do `src/doris/analysis/spectral/periodogram.py` a `peaks.py`, nebo je odstranit, pokud zatim nemaji byt soucasti API.
-5. Dopsat minimalni `README.md`: instalace, nastaveni `PYTHONPATH=src`, autentizace a zakladni priklady.
-6. Pridat testy pro:
-   - filtrovani nazvu souboru,
-   - skladani CDDIS URL,
-   - parsovani `MD5SUMS`,
-   - dekompresi `.Z`/`.gz`,
-   - parsovani SP3,
-   - vyber orbitnich souboru podle obdobi,
-   - OLS/WLS trend fitting a BIC split.
+1. Opravit docstring v `src/doris/output/plots/plot_settings.py`, kde zustal import pres `app`.
+2. Rozhodnout, jestli maji byt vystupni PDF v `LaTeX/images/test/` verzovane, nebo brane jako generovane artefakty.
+3. Zkontrolovat, ze prihlasovaci soubory nejsou trackovane ani staged.
+4. Doplnit minimalni testy pro filtrovani nazvu, CDDIS URL, parsovani `MD5SUMS`, dekompresi, SP3 parser, vyber orbitnich souboru a trend fitting.
+5. Zapsat do `README.md` kratky navod: instalace, `pip install -e .`, autentizace a zakladni priklady.
+6. U spektralni casti zvazit Lomb-Scargle pro nerovnomerne vzorkovane casove rady.
