@@ -1,0 +1,2 @@
+sat,solution,n_days,n_arcs,fit_rms_mm_mean,total_rms_mm_mean,radial_rms_mm_mean,along_rms_mm_mean,out_rms_mm_mean,radial_max_mm_max,along_max_mm_max,out_max_mm_max
+SA,ZG,30,480,1.0,1.0,0.0,2.0,0.0,1.0,5.0,1.0
