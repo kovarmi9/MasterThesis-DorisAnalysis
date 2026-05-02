@@ -233,8 +233,12 @@ Spektralni analyza casovych rad.
 
 ### `periodogram.py`
 
-- `compute_periodogram(...)` je verejny wrapper.
-- `compute_fft_periodogram(...)` pocita jednostranny FFT periodogram.
+- `compute_periodogram(...)` je verejny wrapper pro FFT i Lomb-Scargle periodogram.
+- Podporuje vstup jako dvojici poli `(t, y)` i jako `pandas.DataFrame` se zadanym `time_col` a jednim nebo vice `value_cols`.
+- `method="fft"` pocita jednostranny FFT periodogram pro pravidelne vzorkovane rady.
+- `method="lomb_scargle"` pocita Lomb-Scargle periodogram pro nerovnomerne vzorkovane rady.
+- Interni `_fft_periodogram_1d(...)` a `_lomb_scargle_periodogram_1d(...)` pracuji nad cistymi `numpy` poli bez pandas.
+- `compute_fft_periodogram(...)` je kompatibilitni wrapper pro starsi notebooky/kod.
 - Vystup obsahuje `frequency`, `period`, `amplitude`, `power`, `phase_rad`.
 - Volitelne omezuje periody pomoci `min_period` a `max_period`.
 
@@ -244,6 +248,14 @@ Spektralni analyza casovych rad.
 - Pouziva `scipy.signal.find_peaks`.
 - Slouzi pro vytazeni dominantnich period z periodogramu.
 
+### `significance.py`
+
+- `estimate_periodogram_threshold(...)` odhaduje amplitudovy nebo vykonovy prah periodogramu pomoci permutacniho nuloveho modelu.
+- Opakovane nahodne promicha hodnoty casove rady, spocita periodogram a ulozi maximum zvoleneho sloupce, typicky `amplitude`.
+- Vraceny prah je kvantil urceny parametrem `false_alarm_level`, napr. `0.95`.
+- `find_significant_peaks(periodogram, threshold, ...)` hleda lokalni vrcholy nad zadanym prahem.
+- Funkce pracuji s vystupem `compute_periodogram()` a podporuji i periodogramy s vice komponentami pres sloupec `component`.
+
 ### `__init__.py`
 
 Re-exportuje:
@@ -251,6 +263,8 @@ Re-exportuje:
 - `compute_periodogram`
 - `compute_fft_periodogram`
 - `select_periodogram_peaks`
+- `estimate_periodogram_threshold`
+- `find_significant_peaks`
 
 ## `src/doris/analysis/orbits`
 
@@ -275,67 +289,372 @@ SP3 files
 
 Nacitani, vyber, cisteni a normalizace SP3 orbit.
 
+Tahle cast je hlavni vstupni brana pro orbitni data. Umi najit spravne SP3 soubory podle data, precist jejich obsah do `pandas.DataFrame`, vyresit prekryvy/duplicity, prevest jednotky a casove skaly a ulozit diagnosticka metadata do `df.attrs`.
+
+Nejdulezitejsi verejne importy:
+
+```python
+from datetime import date
+from pathlib import Path
+
+from doris.analysis.orbits.loading import (
+    load_orbit_dataframe,
+    load_orbit_day,
+    iter_orbit_days,
+    select_orbit_files_for_period,
+    select_file_for_day,
+)
+```
+
+Typicke pouziti:
+
+```python
+df = load_orbit_dataframe(
+    Path("data/orbits/gop/srl"),
+    start=date(2024, 1, 1),
+    end=date(2024, 1, 7),
+    target_time_scale="TAI",
+    add_epoch=True,
+)
+
+print(df.columns)
+print(df.attrs["load_to_df"])
+```
+
+Co typicky vraci DataFrame:
+
+- polohove sloupce `x`, `y`, `z`,
+- rychlostni sloupce `vx`, `vy`, `vz`,
+- casovy sloupec typu `MJD_TAI`, `MJD_UTC` nebo `MJD_GPS`,
+- volitelne `epoch_TAI` / `epoch_UTC` / `epoch_GPS`, pokud je `add_epoch=True`,
+- `satellite`, pokud je v datech vice satelitu; pokud je jen jeden, satelit je presunut do `df.attrs["satellite"]`,
+- `source_file`, pokud se sklada vice SP3 souboru.
+
+Dulezita metadata v `df.attrs`:
+
+- `source_files` - seznam souboru, ze kterych DataFrame vznikl,
+- `time_scale` - aktualni casova skala,
+- `time_column` - aktualni casovy sloupec,
+- `coordinate_system` - souradnicovy system detekovany z hlavicky SP3,
+- `position_unit` a `velocity_unit`,
+- `deduplication` - informace o odstraneni duplicit,
+- `load_to_df` - parametry celeho nacitani a souhrny kontrol.
+
 #### `load_to_df.py`
 
 Vysoka vrstva pro nacteni orbit do pandas DataFrame.
 
-- `load_orbit_dataframe(source, start, end, ...)` nacte casovy rozsah.
-- `load_orbit_day(source, day, window=0.0, ...)` nacte jeden den a oreze ho na denni okno.
-- `iter_orbit_days(source, start, end, skip_missing=True, **kwargs)` iteruje po dnech.
-- Pri nacitani vola vyber souboru, parsovani SP3, deduplikaci, volitelnou normalizaci jednotek a volitelne kontroly pokryti/casove pravidelnosti.
-- Metadata o nacitani uklada do `df.attrs["load_to_df"]`.
+`load_orbit_dataframe(source, start, end, ...)`
+
+Nacte cele obdobi od `start` do `end` vcetne. Je to nejpohodlnejsi funkce pro beznou praci s orbitami.
+
+Pipeline uvnitr:
+
+```text
+source + start/end
+  -> select_orbit_files_for_period()
+  -> optional inspect_orbit_file_coverage()
+  -> read_sp3_files_to_dataframe()
+  -> deduplicate_orbit_epochs()
+  -> optional convert_trajectory_units()
+  -> optional inspect_orbit_time_series()
+  -> df.attrs["load_to_df"]
+```
+
+Hlavni parametry:
+
+- `source: Path` - slozka, kde jsou SP3 soubory.
+- `start: date`, `end: date` - pozadovane datumove obdobi.
+- `recursive=True` - hleda i v podslozkach; vhodne pro struktury typu `data/orbits/gop/srl`.
+- `dedup_keep="first"` - jak resit duplicity stejne epochy: `first`, `last`, nebo `mean`.
+- `compute_statistics=False` - zda pri deduplikaci pocitat statistiky prekryvu.
+- `normalize=True` - zda prevest jednotky/cas na jednotny format.
+- `target_time_scale="TAI"` - cilova casova skala po normalizaci.
+- `add_epoch=True` - prida citelny datetime sloupec, napr. `epoch_TAI`.
+- `inspect_coverage=True` - zkontroluje navaznost souboru podle nazvu.
+- `inspect_continuity=True` - zkontroluje pravidelnost casove rady po nacteni.
+- `expected_step_seconds=60` - ocekavany krok mezi epochami.
+
+Pouziti:
+
+```python
+df = load_orbit_dataframe(
+    Path("data/orbits/ssa/srl"),
+    date(2024, 1, 1),
+    date(2024, 1, 3),
+    dedup_keep="mean",
+    target_time_scale="TAI",
+)
+```
+
+`load_orbit_day(source, day, window=0.0, ...)`
+
+Nacte data pro jeden den. Pouziva stejne cteni, deduplikaci a volitelnou normalizaci jako `load_orbit_dataframe()`, ale po nacteni DataFrame jeste oreze na interval daneho dne.
+
+- `day: date` - den, ktery chci nacist.
+- `window: float` - rozsireni denniho okna v MJD dnech. Napr. `window=0.01` prida okraj okolo dne; uzitecne pro interpolaci.
+- `add_epoch=False` ve vychozim stavu, protoze u dennich iteraci se casto chce mensi DataFrame.
+- `inspect_coverage=False` a `inspect_continuity=False` ve vychozim stavu, aby denni smycky nebyly zbytecne drahe.
+
+Pouziti:
+
+```python
+df_day = load_orbit_day(
+    Path("data/orbits/gop/srl"),
+    date(2024, 1, 1),
+    window=0.01,
+    target_time_scale="TAI",
+)
+```
+
+`iter_orbit_days(source, start, end, skip_missing=True, **kwargs)`
+
+Generator pro praci po jednotlivych dnech. Pro kazdy den vola `load_orbit_day()` a vraci dvojici `(day, df_day)`.
+
+- `skip_missing=True` znamena, ze dny bez dat preskoci.
+- `skip_missing=False` znamena, ze pri chybejicim dni vyhodi chybu.
+- `**kwargs` se predavaji primo do `load_orbit_day()`.
+
+Pouziti:
+
+```python
+for day, df_day in iter_orbit_days(
+    Path("data/orbits/ssa/srl"),
+    date(2024, 1, 1),
+    date(2024, 1, 31),
+    window=0.01,
+):
+    print(day, len(df_day))
+```
 
 #### `_filename_parsers.py`
 
 Parsuje metadata z nazvu souboru.
 
-- `FilenameInfo` drzi `path`, `start`, `end`, `provider`, `satellite`, `version`, `scheme`.
-- `parse_cddis_filename()` zna CDDIS styl `.bYYDDD.eYYDDD.`.
-- `parse_gop_filename()` zna styl `provider_satellite_YYMMDD_YYMMDD_Vxx.sp3`.
-- `parse_filename_info()` zkusi vsechny zname parsery.
+`FilenameInfo`
+
+Dataclass s informacemi odvozenymi pouze z nazvu souboru:
+
+- `path` - puvodni cesta,
+- `start`, `end` - datumove pokryti souboru,
+- `provider` - zdroj/solution family, napr. `GOP`,
+- `satellite` - satelit, napr. `srl`, `cs2`, `ja3`,
+- `version` - verze, napr. `V99`,
+- `scheme` - parser, ktery soubor rozpoznal.
+
+`parse_cddis_filename(path)`
+
+Rozpoznava CDDIS styl s rokem a dnem v roce:
+
+```text
+ssasrl20.b22002.e22010.D__.sp3.001
+        ^^^^^  ^^^^^
+        start  end
+```
+
+Tento parser hleda casti `.bYYDDD.eYYDDD.`. Napr. `22002` znamena rok 2022, druhy den roku.
+
+`parse_gop_filename(path)`
+
+Rozpoznava GOP-like styl:
+
+```text
+GOP_cs2_240101_240101_V99.sp3
+ ^   ^   ^      ^      ^
+ |   |   start  end    version
+ provider satellite
+```
+
+`parse_filename_info(path)`
+
+Centralni dispatch. Zkusi vsechny zname parsery v poradi:
+
+1. `parse_gop_filename`,
+2. `parse_cddis_filename`.
+
+Kdyz zadny parser nesedi, vrati `None`. Na tom stoji vyber souboru podle data.
 
 #### `_orbit_file_selection.py`
 
-- `select_orbit_files_for_period(root, start, end, recursive=False)` vybere vsechny SP3 soubory, jejichz pokryti se prekryva s pozadovanym intervalem.
-- `select_file_for_day(root, day, recursive=True)` vybere nejvhodnejsi soubor pro konkretni den, prednost ma soubor s lepsim okolnim pokrytim.
+`select_orbit_files_for_period(root, start, end, recursive=False)`
+
+Vybere vsechny soubory, jejichz datumove pokryti se prekryva s pozadovanym intervalem `[start, end]`.
+
+Pouziva `parse_filename_info()`, takze bere jen soubory s rozpoznanym nazvem. Soubory bez rozpoznatelneho datumu ignoruje.
+
+Pouziti:
+
+```python
+paths = select_orbit_files_for_period(
+    Path("data/orbits/gop/srl"),
+    start=date(2024, 1, 1),
+    end=date(2024, 1, 7),
+    recursive=True,
+)
+```
+
+`select_file_for_day(root, day, recursive=True)`
+
+Vybere jeden nejvhodnejsi soubor pokryvajici konkretni den. Pokud den pokryva vic souboru, preferuje soubor, ktery ma lepsi okoli kolem ciloveho dne. To je uzitecne u interpolace, kde okraje souboru byvaji citlivejsi.
+
+Vraci `FilenameInfo | None`, tedy metadata vybraneho souboru nebo `None`, pokud nic nenasel.
 
 #### `_sp3_reader.py`
 
 SP3 parser.
 
-- `read_sp3_to_dataframe(path)` nacte jeden SP3 soubor.
-- `read_sp3_files_to_dataframe(paths)` nacte vice souboru a spoji je.
-- Parsuje epochy, `P` radky pozic a `V` radky rychlosti.
-- Vystupni sloupce jsou typicky `x`, `y`, `z`, `vx`, `vy`, `vz`, `MJD_<TIME_SCALE>` a podle situace `satellite`/`source_file`.
-- Metadata uklada do `df.attrs`: `source_files`, `time_scale`, `time_column`, `coordinate_system`, `position_unit`, `velocity_unit`.
-- Pokud je v datech jen jeden satelit, sloupec `satellite` presune do metadat.
+`read_sp3_to_dataframe(path)`
+
+Nacte jeden SP3 soubor do DataFrame. Je to nizsi vrstva; obvykle ji neni potreba volat primo, pokud staci `load_orbit_dataframe()`.
+
+Co parser dela:
+
+- rozdeli soubor na hlavicku a telo,
+- z hlavicky detekuje casovou skalu (`GPS`, `UTC`, `TAI`) a souradnicovy system (`ITRF`, `IGS`, `GCRF`, ...),
+- cte epochy z radku zacinajicich `*`,
+- cte pozice z radku `P`,
+- cte rychlosti z radku `V`,
+- prevadi epochu na MJD,
+- uklada pozice a rychlosti do radku DataFrame.
+
+Vystupni sloupce:
+
+- `MJD_<TIME_SCALE>`, napr. `MJD_GPS`,
+- `x`, `y`, `z`,
+- `vx`, `vy`, `vz`,
+- `satellite`, pokud je v souboru vice satelitu.
+
+Metadata:
+
+- `df.attrs["source_files"]`,
+- `df.attrs["time_scale"]`,
+- `df.attrs["time_column"]`,
+- `df.attrs["coordinate_system"]`,
+- `df.attrs["position_unit"] = "km"`,
+- `df.attrs["velocity_unit"] = "dm/s"`.
+
+Pozor: po samotnem SP3 readeru jsou jednotky porad ve SP3 jednotkach, typicky `km` a `dm/s`. Na metry a `m/s` je prevadi az `convert_trajectory_units()`.
+
+`read_sp3_files_to_dataframe(paths)`
+
+Nacte vice SP3 souboru a spoji je do jednoho DataFrame.
+
+- u kazdeho souboru vola `read_sp3_to_dataframe()`,
+- neuspesne soubory nezastavi okamzite cele cteni; uklada je do `failed_source_files`,
+- pridava sloupec `source_file`,
+- vysledek seradi podle casu a pripadne podle satelitu,
+- metadata bere z prvniho uspesne nacteneho souboru.
 
 #### `_convert_trajectory_units.py`
 
 Normalizace casu a jednotek.
 
-- `convert_trajectory_units(df, target_time_scale="TAI", add_epoch=True)` prevadi pozice/rychlosti na `m` a `m/s`.
-- Detekuje vstupni casovy sloupec a casovou skalu.
-- Prevadi mezi `UTC`, `TAI` a `GPS` pomoci `astropy`.
-- Uklada aktualni jednotky a casovy sloupec do `df.attrs`.
+`convert_trajectory_units(df, target_time_scale="TAI", add_epoch=False)`
+
+Normalizuje DataFrame po nacteni SP3.
+
+Co dela:
+
+- detekuje zdrojovou casovou skalu z `df.attrs["time_scale"]` nebo ze sloupce `MJD_*`,
+- prevede cas na cilovou skalu `TAI`, `UTC` nebo `GPS`,
+- prejmenuje/cisti MJD sloupce tak, aby zustal jen aktualni `MJD_<target>`,
+- prevede pozice:
+  - `km -> m`,
+  - `m -> m`,
+- prevede rychlosti:
+  - `dm/s -> m/s`,
+  - `km/s -> m/s`,
+  - `m/s -> m/s`,
+- volitelne prida datetime sloupec `epoch_<target>`.
+
+Po prevodu nastavuje:
+
+- `df.attrs["source_time_scale"]`,
+- `df.attrs["source_time_column"]`,
+- `df.attrs["time_scale"]`,
+- `df.attrs["time_column"]`,
+- `df.attrs["position_unit"] = "m"`,
+- `df.attrs["velocity_unit"] = "m/s"`,
+- `df.attrs["normalized"] = True`.
+
+Pouziti:
+
+```python
+raw = read_sp3_files_to_dataframe(paths)
+df = convert_trajectory_units(raw, target_time_scale="TAI", add_epoch=True)
+```
 
 #### `_deduplicate.py`
 
-- `deduplicate_orbit_epochs(df, keep="first", compute_statistics=False)` odstranuje duplicitni epochy.
-- Klice odvozuje podle casoveho sloupce a pripadne satelitu.
-- Podporuje strategie `first`, `last`, `mean`.
+`deduplicate_orbit_epochs(df, keep="mean", compute_statistics=True)`
+
+Odstranuje duplicitni epochy po spojeni vice souboru.
+
+Klic duplicity:
+
+- vzdy `df.attrs["time_column"]`,
+- plus `satellite`, pokud je sloupec v DataFrame.
+
+Strategie:
+
+- `keep="first"` - ponecha prvni radek v duplicitni skupine,
+- `keep="last"` - ponecha posledni radek,
+- `keep="mean"` - zprumeruje stavove sloupce `x`, `y`, `z`, `vx`, `vy`, `vz`.
+
+Metadata uklada do `df.attrs["deduplication"]`:
+
+- `strategy`,
+- `overlap_count`,
+- `column_std` pro stavove sloupce, pokud je `compute_statistics=True`.
+
+Vysoka funkce `load_orbit_dataframe()` ma vychozi `dedup_keep="first"` a `compute_statistics=False`, aby nacitani bylo rychlejsi.
 
 #### `_coverage.py`
 
-- `inspect_orbit_file_coverage(paths)` kontroluje navaznost sousednich orbitnich souboru podle pokryti z nazvu.
-- Vystup popisuje `gap`, `touching` nebo `overlap`.
-- Souhrn uklada do `df.attrs["coverage_summary"]`.
+`inspect_orbit_file_coverage(paths)`
+
+Kontroluje navaznost souboru pred samotnym ctenim dat. Pouziva pouze datumove pokryti odvozene z nazvu souboru.
+
+Pro kazdou sousedni dvojici urci:
+
+- `gap` - mezi soubory chybi dny,
+- `touching` - soubory na sebe presne navazuji,
+- `overlap` - soubory se prekryvaji.
+
+Vraci DataFrame s dvojicemi souboru a sloupci jako `left_file`, `right_file`, `relation`, `gap_days`, `overlap_days`.
+
+Souhrn je v:
+
+```python
+coverage = inspect_orbit_file_coverage(paths)
+coverage.attrs["coverage_summary"]
+```
 
 #### `_continuity.py`
 
-- `inspect_orbit_time_series(df, expected_step_seconds=60)` kontroluje casovou pravidelnost nactene trajektorie.
-- Hleda duplicity, mezery a nepravidelne kroky.
-- Souhrn uklada do `df.attrs["time_series_summary"]`.
+`inspect_orbit_time_series(df, expected_step_seconds=60)`
+
+Kontroluje pravidelnost uz nacteneho DataFrame podle aktualniho casoveho sloupce v `df.attrs["time_column"]`.
+
+Hleda:
+
+- `duplicate` - nulovy casovy krok,
+- `gap` - krok vetsi nez ocekavany,
+- `irregular` - krok mensi/jiny nez ocekavany, ale ne nulovy.
+
+Vraci DataFrame problematickych kroku se sloupci:
+
+- `time_prev`,
+- `time_next`,
+- `step_seconds`,
+- `issue_type`.
+
+Souhrn je v:
+
+```python
+issues = inspect_orbit_time_series(df, expected_step_seconds=60)
+issues.attrs["time_series_summary"]
+```
 
 #### `__init__.py`
 
@@ -347,32 +666,446 @@ Verejne z loading package exportuje:
 - `select_orbit_files_for_period`
 - `select_file_for_day`
 
+To znamena, ze pro bezne pouziti neni potreba importovat z podmodulu:
+
+```python
+from doris.analysis.orbits.loading import load_orbit_dataframe
+```
+
+Interni/helper funkce typu `read_sp3_to_dataframe()`, `convert_trajectory_units()` nebo `inspect_orbit_time_series()` existuji v podmodulech a dava smysl je volat primo hlavne pri ladeni nebo kdyz chces pipeline rozebrat na jednotlive kroky.
+
+#### Jak to popsat v textu prace
+
+Presnejsi formulace pro kapitolu o nacitani dat:
+
+```latex
+\subsection{Nacteni dat}
+
+Nacteni orbitnich dat druzic ze souboru ve formatu \texttt{SP3}
+je v knihovne zajisteno modulem
+\texttt{doris.analysis.orbits.loading}. Modul poskytuje vysoko-urovnove
+funkce, ktere nejprve vyberou soubory pokryvajici pozadovane casove
+obdobi, nasledne je nactou do struktury \texttt{pandas.DataFrame},
+odstrani pripadne duplicitni epochy a volitelne sjednoti jednotky
+a casovou skalu.
+
+Funkce \texttt{load\_orbit\_dataframe} slouzi k nacteni orbitnich dat
+pro zvoleny interval datumu. Na zaklade nazvu souboru vybere vsechny
+soubory, jejichz casove pokryti se prekryva s pozadovanym intervalem,
+tyto soubory nacte a spoji do jednoho objektu typu
+\texttt{pandas.DataFrame}. Funkce \texttt{load\_orbit\_day} je urcena
+pro nacteni dat pro jeden konkretni den. Nemusi jit nutne o jediny
+vstupni soubor; funkce opet vybere vsechny soubory pokryvajici dany
+den a vysledna data oreze na denni casove okno, pripadne rozsirene
+o zadany okraj. Funkce \texttt{iter\_orbit\_days} poskytuje iterator,
+ktery vola \texttt{load\_orbit\_day} postupne pro jednotlive dny
+ve zvolenem intervalu.
+
+Samotne cteni formatu \texttt{SP3} provadi nizsi vrstva modulu, zejmena
+funkce \texttt{read\_sp3\_to\_dataframe} a
+\texttt{read\_sp3\_files\_to\_dataframe}. Ty parsujou epochy, polohove
+zaznamy a rychlostni zaznamy a ukladaji je do sloupcu
+\texttt{x}, \texttt{y}, \texttt{z}, \texttt{vx}, \texttt{vy}, \texttt{vz}
+a \texttt{MJD\_<TIME\_SCALE>}. Metadata, jako je casova skala,
+casovy sloupec, souradnicovy system a zdrojove soubory, jsou ulozena
+v atributu \texttt{DataFrame.attrs}.
+
+Pro prevod jednotek a sjednoceni casove skaly slouzi funkce
+\texttt{convert\_trajectory\_units}. Ta prevadi polohy typicky z kilometru
+na metry, rychlosti typicky z decimetru za sekundu na metry za sekundu
+a casovou reprezentaci na zvolenou skalu, napr. \texttt{TAI}. Pri pouziti
+parametru \texttt{normalize=True} je tato normalizace provedena automaticky
+v ramci funkci \texttt{load\_orbit\_dataframe} a \texttt{load\_orbit\_day}.
+```
+
+Obsahove dulezite opravy proti caste zjednodusene formulaci:
+
+- `load_orbit_dataframe()` vybira soubory podle pokryti v nazvu a teprve potom je nacita/spojuje.
+- `load_orbit_day()` neni "nacteni jednoho souboru"; je to nacteni jednoho dne. Muze pouzit vic souboru, pokud dany den pokryvaji nebo pokud je potreba okrajove okno.
+- `iter_orbit_days()` neni samostatny parser; je to generator, ktery opakovane vola `load_orbit_day()`.
+- `convert_trajectory_units()` je helper pro normalizaci, ale pri `normalize=True` se vola automaticky z vyssich loading funkci.
+- Surovy SP3 reader nechava jednotky podle SP3 metadat (`km`, `dm/s`); sjednoceni na `m`, `m/s` dela az normalizacni krok.
+
 ### `orbits/interpolate`
 
 Interpolace trajektorii na referencni epochy.
+
+Tahle cast slouzi k tomu, aby bylo mozne porovnat dve orbitni trajektorie ve stejnem case. Typicky ma jedna trajektorie jine epochy nez druha, proto se jedna z nich interpoluje na casy referencni trajektorie. V projektu je implementovana Hermitova interpolace polohy z polohy a rychlosti.
+
+Zjednoduseny tok:
+
+```text
+source trajectory: t, x, y, z, vx, vy, vz
+reference trajectory: t_ref
+  -> interpolate_trajectory_to_reference()
+     -> prepare sorted source matrix [t, x, y, z, vx, vy, vz]
+     -> call hermite_at_time(M, t_ref, degree=...)
+     -> return DataFrame at reference epochs
+```
+
+#### Dokumentace modulu `doris.analysis.orbits.interpolate`
+
+Modul je rozdeleny na dve vrstvy:
+
+- `hermite.py` - cista numericka interpolace nad `numpy` poli.
+- `interpolate.py` - pohodlny wrapper pro `pandas.DataFrame`.
+- `__init__.py` - verejne exporty celeho podbalicku.
+
+Verejne API:
+
+```python
+from doris.analysis.orbits.interpolate import (
+    hermite_at_time,
+    interpolate_trajectory_to_reference,
+    interpolate_like,
+)
+```
+
+Exporty podle `__init__.py`:
+
+- `hermite_at_time` - nizkourovnova Hermitova interpolace polohy.
+- `interpolate_trajectory_to_reference` - DataFrame wrapper pro interpolaci jedne trajektorie na epochy druhe.
+- `interpolate_like` - zpetne kompatibilni alias pro `interpolate_trajectory_to_reference`.
+
+Kdy pouzit kterou funkci:
+
+- Chci rychle interpolovat raw `numpy` pole: pouzit `hermite_at_time()`.
+- Mam dve orbitni tabulky/DataFrame a chci jednu prevest na casy druhe: pouzit `interpolate_trajectory_to_reference()`.
+- Mam starsi notebook/kod, kde se volalo `interpolate_like()`: muze zustat, dela totiz to same jako `interpolate_trajectory_to_reference()`.
+
+Minimalni vstupni predpoklady:
+
+- casy musi byt ciselne,
+- zdrojova trajektorie musi mit polohu i rychlost,
+- casy zdroje po serazeni nesmi obsahovat duplicity,
+- referencni casy musi lezet uvnitr casoveho rozsahu zdroje,
+- dotazy nesmi byt tak blizko okraje, aby nebylo mozne vybrat dost uzlu pro dany `degree`.
 
 #### `hermite.py`
 
 Implementace Hermitovy interpolace polohy z casu, poloh a rychlosti.
 
-- `hermite_at_time(data, t_query, degree=11, ...)` je hlavni funkce.
-- Podporovane vstupy:
-  - `(t, r, v)`
-  - `(t, x, y, z, vx, vy, vz)`
-  - matice `(N, 7)` jako `[t, x, y, z, vx, vy, vz]`
-- Stupen musi byt lichy; pocet uzlu je `(degree + 1) // 2`.
-- Funkce vraci jen interpolovanou polohu, ne rychlost.
-- Interni `lagrange_basis()`, `lagrange_basis_deriv_at_nodes()` a `hermite_interpolate()` skladaji klasicky Hermituv polynom.
+`hermite.py` je nizkourovnova numericka implementace. Nepracuje s DataFrame, ale s poli `numpy`.
+
+Hlavni verejna funkce:
+
+```python
+from doris.analysis.orbits.interpolate import hermite_at_time
+```
+
+`hermite_at_time(data, t_query, degree=11, drop_nan=True, assume_sorted=False, return_idx=False, atol=1e-12)`
+
+Co dela:
+
+- vezme casy `t`, polohy `r = (x, y, z)` a rychlosti `v = (vx, vy, vz)`,
+- pro kazdy dotazovany cas `t_query` vybere okoli interpolacnich uzlu,
+- z hodnot polohy a prvnich derivaci rychlosti sestavi klasicky Hermituv interpolacni polynom,
+- vrati interpolovanou polohu v dotazovanem case.
+
+Parametry:
+
+- `data` - zdrojova trajektorie. Muze byt `(t, r, v)`, `(t, x, y, z, vx, vy, vz)`, nebo matice `(N, 7)`.
+- `t_query` - jeden cas nebo pole casu, ve kterych chci ziskat interpolovanou polohu.
+- `degree=11` - stupen Hermitova polynomu. Musi byt lichy.
+- `drop_nan=True` - pred interpolaci odstrani radky, kde je `NaN` v case, poloze nebo rychlosti.
+- `assume_sorted=False` - pokud `False`, funkce si data sama seradi podle casu. Pokud vis, ze jsou data uz serazena, `True` setri praci.
+- `return_idx=False` - pokud `True`, vrati krom interpolovane polohy i indexy uzlu pouzitych pro kazdy dotaz.
+- `atol=1e-12` - tolerance pro pripad, kdy je dotazovany cas prakticky totozny s existujicim uzlem.
+
+Podporovane vstupy `data`:
+
+```python
+# 1) trojice casu, poloh a rychlosti
+data = (t, r, v)
+
+# 2) sedm samostatnych vektoru
+data = (t, x, y, z, vx, vy, vz)
+
+# 3) matice tvaru (N, 7)
+data = M  # sloupce: [t, x, y, z, vx, vy, vz]
+```
+
+Vystup:
+
+- pokud `t_query` je jedno cislo, vraci `np.ndarray` tvaru `(3,)`,
+- pokud `t_query` je pole delky `Q`, vraci `np.ndarray` tvaru `(Q, 3)`,
+- pokud `return_idx=True`, vrati navic indexy pouzitych uzlu.
+
+Priklady vystupu:
+
+```python
+# Jeden cas -> jedna poloha [x, y, z]
+r = hermite_at_time(M, 60310.5, degree=11)
+# r.shape == (3,)
+
+# Vice casu -> matice poloh
+r = hermite_at_time(M, np.array([60310.1, 60310.2]), degree=11)
+# r.shape == (2, 3)
+
+# Vratit i pouzite uzly
+r, idx = hermite_at_time(M, np.array([60310.1, 60310.2]), return_idx=True)
+# idx.shape == (2, n_nodes)
+```
+
+Priklad:
+
+```python
+M = df[["MJD_TAI", "x", "y", "z", "vx", "vy", "vz"]].to_numpy()
+t_query = reference_df["MJD_TAI"].to_numpy()
+
+r_interp = hermite_at_time(
+    M,
+    t_query,
+    degree=11,
+    assume_sorted=True,
+)
+```
+
+Stupen interpolace:
+
+- `degree` musi byt lichy (`3`, `5`, `7`, `9`, `11`, ...),
+- pocet pouzitych uzlu je `n_nodes = (degree + 1) // 2`,
+- napr. `degree=11` pouziva 6 uzlu,
+- cim vyssi stupen, tim vice okolnich bodu je potreba.
+
+Vyber uzlu:
+
+- funkce najde pozici dotazovaneho casu pomoci `np.searchsorted`,
+- vybere `n_nodes` uzlu kolem interpolacni mezery,
+- pro `degree=11` tedy 3 uzly vlevo a 3 uzly vpravo,
+- pokud je dotaz moc blizko okraje a neni dost uzlu, vyhodi `ValueError`.
+
+Specialni pripady a kontroly:
+
+- pokud `drop_nan=True`, radky s `NaN` v case, poloze nebo rychlosti se vyhodi,
+- pokud `assume_sorted=False`, data se seradi podle casu,
+- po serazeni musi byt casy striktne rostouci; duplicity vyhodi chybu,
+- pokud se `t_query` trefi primo do uzlu v toleranci `atol`, funkce vrati primo zadanou polohu bez interpolace.
+
+Typicke chyby:
+
+- `ValueError: degree must be odd` - `degree` je sudy.
+- `ValueError: Not enough points for degree=...` - pro zvoleny stupen neni dost bodu.
+- `ValueError: Times must be strictly increasing and without duplicates` - ve zdroji jsou duplicitni nebo nesezarazene casy po priprave.
+- `ValueError: Query too close to edge...` - dotazovany cas je moc blizko zacatku nebo konci rady.
+
+Interni funkce v `hermite.py`:
+
+- `_coerce_inputs(data)` sjednoti ruzne vstupni formaty na trojici `t`, `r`, `v`.
+- `_as_query_array(t_query)` prevede dotazovane casy na 1D pole a pamatuje si, zda vstup byl scalar.
+- `_exact_node_index(t_sorted, q, atol)` resi pripad, kdy dotaz lezi primo v uzlu.
+- `_select_nodes(t_sorted, t_query, n_nodes)` vybere uzly okolo dotazovaneho casu.
+- `lagrange_basis(x_nodes, x)` pocita hodnoty Lagrangeovych bazi.
+- `lagrange_basis_deriv_at_nodes(x_nodes)` pocita derivace bazi v uzlech.
+- `hermite_interpolate(x_nodes, y_nodes, dy_nodes, x)` provede samotnou interpolaci pro jeden cas.
+
+Jak je Hermituv polynom slozeny:
+
+- `lagrange_basis(x_nodes, x)` pocita Lagrangeovy bazove polynomy `L_k(x)`,
+- `lagrange_basis_deriv_at_nodes(x_nodes)` pocita derivace `L'_k(x_k)` v uzlech,
+- `hermite_interpolate(x_nodes, y_nodes, dy_nodes, x)` slozi klasicky Hermituv tvar:
+
+```text
+H_k(x)    = (1 - 2 (x - x_k) L'_k(x_k)) L_k(x)^2
+Hhat_k(x) = (x - x_k) L_k(x)^2
+
+y(x) = sum_k H_k(x) y_k + Hhat_k(x) y'_k
+```
+
+V tomto projektu:
+
+- `x_nodes` jsou casy,
+- `y_nodes` jsou polohy `(x, y, z)`,
+- `dy_nodes` jsou rychlosti `(vx, vy, vz)`,
+- funkce interpoluje pouze polohu, ne rychlost.
 
 #### `interpolate.py`
 
 Pandas wrapper nad Hermitovou interpolaci.
 
-- `interpolate_trajectory_to_reference(df_source, df_reference, method="hermite", degree=11, time_col=None, ...)` interpoluje zdrojovou trajektorii na epochy referencniho DataFrame.
-- Automaticky hleda spolecny casovy sloupec z `t_sec_round`, `t_sec`, `MJD_TAI`, `MJD_GPS`, pokud neni zadany.
-- Vyzaduje ve zdroji `x`, `y`, `z`, `vx`, `vy`, `vz`.
-- Vystup obsahuje interpolovane `x`, `y`, `z`; `vx`, `vy`, `vz` jsou zatim `NaN`, protoze backend vraci pouze polohu.
-- `interpolate_like()` je zpetne kompatibilni alias.
+`interpolate.py` je prakticka pandas vrstva nad `hermite_at_time()`. Tohle je funkce, kterou se vyplati pouzivat v analyzach a pri porovnani orbit.
+
+```python
+from doris.analysis.orbits.interpolate import interpolate_trajectory_to_reference
+```
+
+`interpolate_trajectory_to_reference(df_source, df_reference, method="hermite", degree=11, time_col=None, source_window_margin_points=None, preserve_reference_columns=True)`
+
+Co dela:
+
+- najde spolecny casovy sloupec,
+- ze zdrojove trajektorie vybere `time_col`, `x`, `y`, `z`, `vx`, `vy`, `vz`,
+- odstrani radky s neplatnymi hodnotami,
+- seradi zdroj podle casu,
+- overi, ze referencni casy lezi uvnitr casoveho intervalu zdroje,
+- zavola `hermite_at_time()`,
+- vrati DataFrame na epochach referencni trajektorie.
+
+Parametry:
+
+- `df_source` - zdrojova trajektorie, ktera se bude interpolovat.
+- `df_reference` - referencni trajektorie; jeji casy urcuji vystupni epochy.
+- `method="hermite"` - zatim je implementovana pouze hodnota `"hermite"`.
+- `degree=11` - stupen Hermitovy interpolace predany do `hermite_at_time()`.
+- `time_col=None` - spolecny casovy sloupec. Pokud neni zadany, funkce ho zkusi najit automaticky.
+- `source_window_margin_points=None` - kompatibilitni parametr, aktualne se v implementaci nepouziva.
+- `preserve_reference_columns=True` - pokud `True`, vystup ponecha sloupce z referencniho DataFrame a jen prepise/doplni interpolovane stavove slozky.
+
+Casovy sloupec:
+
+- pokud predas `time_col`, musi existovat v obou DataFrame,
+- pokud `time_col=None`, funkce zkusi postupne:
+  1. `t_sec_round`,
+  2. `t_sec`,
+  3. `MJD_TAI`,
+  4. `MJD_GPS`.
+
+Minimalni pozadovane sloupce ve zdroji:
+
+```text
+time_col, x, y, z, vx, vy, vz
+```
+
+Reference musi obsahovat alespon stejny casovy sloupec.
+
+Interni kroky v `interpolate.py`:
+
+- `_resolve_time_column()` najde nebo overi spolecny casovy sloupec.
+- `_prepare_source_matrix()` vybere `time_col`, `x`, `y`, `z`, `vx`, `vy`, `vz`, vyhodi neplatne radky, seradi zdroj a vytvori matici `(N, 7)`.
+- `_prepare_reference()` zkopiruje a seradi referencni DataFrame a vytahne dotazovane casy.
+- `interpolate_trajectory_to_reference()` zkontroluje intervaly, zavola `hermite_at_time()` a slozi vysledny DataFrame.
+
+Priklad pouziti:
+
+```python
+df_interp = interpolate_trajectory_to_reference(
+    df_source=df_gop,
+    df_reference=df_ssa,
+    time_col="MJD_TAI",
+    degree=11,
+)
+```
+
+Priklad s automatickym vyberem casoveho sloupce:
+
+```python
+df_interp = interpolate_trajectory_to_reference(
+    df_source=df_a,
+    df_reference=df_b,
+    degree=7,
+)
+```
+
+To funguje jen pokud oba DataFrame sdileji jeden z podporovanych casovych sloupcu: `t_sec_round`, `t_sec`, `MJD_TAI`, nebo `MJD_GPS`.
+
+Priklad bez zachovani referencnich sloupcu:
+
+```python
+df_interp = interpolate_trajectory_to_reference(
+    df_source=df_a,
+    df_reference=df_b,
+    time_col="MJD_TAI",
+    preserve_reference_columns=False,
+)
+```
+
+Vystup pak obsahuje hlavne casovy sloupec a interpolovane `x`, `y`, `z`, `vx`, `vy`, `vz`.
+
+Vysledek:
+
+- pokud `preserve_reference_columns=True`, vystup zacina jako kopie `df_reference`,
+- sloupce `x`, `y`, `z` jsou nahrazeny interpolovanou polohou zdroje,
+- `vx`, `vy`, `vz` jsou nastaveny na `NaN`, protoze soucasny Hermite backend vraci pouze polohu,
+- metadata obsahuji:
+  - `interpolation_method = "hermite"`,
+  - `interpolation_degree`,
+  - `interpolation_time_column`,
+  - `interpolation_source_rows`,
+  - `interpolation_reference_rows`.
+
+Omezeni:
+
+- `method` muze byt zatim pouze `"hermite"`,
+- `source_window_margin_points` je ponechany kvuli kompatibilite API, ale v implementaci se nepouziva,
+- referencni casy nesmi byt mimo interval zdrojove trajektorie,
+- kvuli vyberu uzlu nesmi byt dotazy prilis blizko okraje zdrojove rady; v praxi se to casto resi orezem okraju, napr. v `compare_trajectories(edge_trim=...)`.
+
+Typicke chyby:
+
+- `KeyError: No common time column found` - DataFrame nemaji spolecny casovy sloupec a `time_col` nebyl predan explicitne.
+- `KeyError: df_source is missing required columns` - zdroj nema nektery ze sloupcu `x`, `y`, `z`, `vx`, `vy`, `vz`.
+- `ValueError: Only method='hermite' is supported` - parametr `method` ma jinou hodnotu.
+- `ValueError: Reference times are outside source interpolation interval` - referencni casy presahuji zdrojovou trajektorii.
+- `ValueError: Query too close to edge...` - predany rozsah je sice uvnitr zdroje, ale pro zvoleny `degree` neni dost uzlu na okraji.
+
+`interpolate_like(...)`
+
+Zpetne kompatibilni alias pro `interpolate_trajectory_to_reference(...)`.
+
+Podpis je stejny jako u hlavni funkce:
+
+```python
+interpolate_like(
+    df_source,
+    df_reference,
+    method="hermite",
+    degree=11,
+    time_col=None,
+    source_window_margin_points=None,
+    preserve_reference_columns=True,
+)
+```
+
+Pouziti:
+
+```python
+df_interp = interpolate_like(df_source=df_a, df_reference=df_b, time_col="MJD_TAI")
+```
+
+Typicky vztah k porovnani orbit:
+
+```text
+df_a, df_b
+  -> compare_trajectories(df_a, df_b)
+     -> oreze okraje df_b podle edge_trim
+     -> interpolate_trajectory_to_reference(df_a, df_b_trimmed)
+     -> spocita rozdily df_b_trimmed - df_a_interpolated
+```
+
+#### Jak popsat Hermitovu interpolaci v textu prace
+
+Mozna formulace:
+
+```latex
+\subsection{Hermitova interpolace orbit}
+
+Pro porovnani dvou orbitnich reseni je nutne vyjadrit obe trajektorie
+ve stejnych epochach. V knihovne je tento krok realizovan modulem
+\texttt{doris.analysis.orbits.interpolate}, ktery pouziva Hermitovu
+interpolaci polohy. Interpolace vyuziva nejen polohove slozky
+\texttt{x}, \texttt{y}, \texttt{z}, ale take rychlostni slozky
+\texttt{vx}, \texttt{vy}, \texttt{vz}, ktere predstavuji prvni derivace
+polohy podle casu.
+
+Nizkourovnova funkce \texttt{hermite\_at\_time} pracuje s poli
+obsahujicimi cas, polohu a rychlost. Pro kazdou pozadovanou epochu
+vybere okoli interpolacnich uzlu a sestavi Hermituv interpolacni
+polynom. Stupen polynomu je zadavan parametrem \texttt{degree} a musi
+byt lichy; pocet pouzitych uzlu je roven
+\texttt{(degree + 1) / 2}. Ve vychozim nastaveni \texttt{degree=11}
+je tedy pouzito sest okolnich uzlu.
+
+Pro praci s tabulkami \texttt{pandas.DataFrame} slouzi funkce
+\texttt{interpolate\_trajectory\_to\_reference}. Ta interpoluje
+zdrojovou trajektorii na epochy referencni trajektorie. Vstupni
+trajektorie musi obsahovat casovy sloupec a stavove slozky
+\texttt{x}, \texttt{y}, \texttt{z}, \texttt{vx}, \texttt{vy}, \texttt{vz}.
+Vystupem je \texttt{DataFrame} na referencnich epochach, ve kterem jsou
+sloupce \texttt{x}, \texttt{y}, \texttt{z} nahrazeny interpolovanou
+polohou. Soucasna implementace vraci pouze interpolovanou polohu,
+nikoli interpolovanou rychlost; rychlostni sloupce jsou proto ve vystupu
+nastaveny na \texttt{NaN}.
+```
 
 ### `orbits/track`
 
@@ -477,6 +1210,32 @@ Stahovani orbitnich dat pres SSH/SFTP pres `doris.input.ssh`.
 ### `notebooks/tests/hermite_interpolation_accuracy.ipynb`
 
 Validacni notebook pro presnost Hermitovy interpolace orbit.
+
+### `notebooks/tests/periodograms_test.ipynb`
+
+Validacni notebook pro spektralni analyzu na synteticke stanicni casove rade.
+
+Notebook je rozdeleny do tri hlavnich bloku:
+
+1. generovani fiktivni DORIS-like casove rady se znamymi periodicitami,
+2. FFT analyza pravidelne vzorkovane rady,
+3. Lomb-Scargle analyza stejne sedmidenni testovaci rady.
+
+V metodickych blocich se vzdy:
+
+- spocita kompletni periodogram a vypise se jako tabulka,
+- odhadne 95% false-alarm prah pomoci permutacniho nuloveho modelu,
+- vykresli periodogram s prahovou linii a vyznamnymi peaky,
+- vypisou se generovane a nalezene periodicity,
+- nalezene sinusove slozky se fituji v casove oblasti a odectou,
+- porovna se rozptyl pred a po odecteni a vykresli se rezidualni rada.
+
+Generovani dat je rozdelene na samostatne kroky: vytvoreni sedmidenni casove osy,
+slozeni tri znamych periodickych slozek, vykresleni ciste periodicity, vytvoreni mirne
+realistickeho sumu, vykresleni samotneho sumu a nakonec slozeni finalnich testovacich
+dat jako periodicita plus sum.
+
+Grafy v notebooku maji ceske popisy a ukladaji se jako PDF do `LaTeX/images/test/`.
 
 ## Data a soukrome soubory
 
@@ -619,11 +1378,15 @@ station time series
 
 ```text
 station time series
-  -> compute_fft_periodogram()
+  -> compute_periodogram(method="fft" nebo method="lomb_scargle")
   -> period/amplitude/power/phase table
-  -> select_periodogram_peaks()
-  -> dominant periods for plots/tables
+  -> estimate_periodogram_threshold()
+  -> find_significant_peaks()
+  -> significant periods for plots/tables
 ```
+
+Testovaci notebook `notebooks/tests/periodograms_test.ipynb` ukazuje FFT i Lomb-Scargle pres verejny
+wrapper `compute_periodogram()` a jednoduchy odhad false-alarm prahu pomoci permutacniho nuloveho modelu.
 
 ### Orbitni porovnani
 
