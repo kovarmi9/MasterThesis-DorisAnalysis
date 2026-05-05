@@ -22,6 +22,8 @@ MasterThesis-DorisAnalysis/
 |       |   +-- ssh/
 |       +-- analysis/
 |       |   +-- stations/
+|       |   |   +-- loading/
+|       |   |   +-- discontinuities/
 |       |   +-- spectral/
 |       |   +-- orbits/
 |       |       +-- loading/
@@ -30,6 +32,8 @@ MasterThesis-DorisAnalysis/
 |       |       +-- compare/
 |       |       +-- transform/
 |       +-- output/
+|           +-- tables/
+|           |   +-- latex.py
 |           +-- plots/
 +-- notebooks/
 |   +-- stations/
@@ -44,15 +48,18 @@ MasterThesis-DorisAnalysis/
 Nejrychlejsi orientace:
 
 1. `src/doris/input/` resi, odkud se data vezmou a kam se ulozi.
-2. `src/doris/analysis/stations/` a `src/doris/analysis/spectral/` resi stanicni casove rady.
-3. `src/doris/analysis/orbits/` resi SP3 orbity: vyber souboru, parsovani, jednotky, interpolaci, RTN a porovnani.
-4. `src/doris/output/plots/` obsahuje male pomocniky pro jednotny vzhled grafu.
-5. `src/doris/_utils/` obsahuje sdilene funkce pouzite napric vstupnimi workflow.
+2. `src/doris/analysis/stations/` resi stanicni STCD data: nacteni, trend a detekci skoku.
+3. `src/doris/analysis/spectral/` resi FFT/Lomb-Scargle spektralni analyzu casovych rad.
+4. `src/doris/analysis/orbits/` resi SP3 orbity: vyber souboru, parsovani, jednotky, interpolaci, RTN a porovnani.
+5. `src/doris/output/tables/` a `src/doris/output/plots/` obsahuji pomocniky pro export tabulek a vzhled grafu.
+6. `src/doris/_utils/` obsahuje sdilene funkce pouzite napric vstupnimi workflow.
 
 Importy maji smerovat na package `doris`, napr.:
 
 ```python
 from doris.input.cddis import download_from_cddis
+from doris.analysis.stations.loading import load_station_dataframe
+from doris.analysis.stations.discontinuities import detect_jumps_lowess
 from doris.analysis.stations.trend import fit_piecewise_trend
 from doris.analysis.orbits import load_orbit_dataframe, compare_trajectories
 ```
@@ -226,6 +233,254 @@ station series
   -> BIC vyber breakpointu
   -> fitted hodnoty, residualy, segment summaries
 ```
+
+### `stations/loading`
+
+Nacitani STCD stanicnich casovych rad do DataFrame pripraveneho pro analyzu.
+Tahle cast vznikla proto, aby se opakovane notebookove kroky kolem STCD souboru
+presunuly do knihovny a notebooky uz pracovaly s hotovou tabulkou se standardnimi
+casovymi sloupci, vyplnenymi mezerami a konzistentnimi metadaty.
+
+Verejny import:
+
+```python
+from doris.analysis.stations.loading import load_station_dataframe
+```
+
+#### `load_to_df.py`
+
+`load_station_dataframe(path, start=None, end=None, fill_gaps=True, keep_xyz=False)`
+
+Hlavni vstupni bod pro stanicni data. Sklada nizsi helpery do jedne pipeline:
+
+```text
+STCD file
+  -> read_stcd_to_dataframe()
+  -> add_time_columns()
+  -> optional regularize_mjd_grid()
+  -> optional date-window filter
+  -> optional drop XYZ columns
+```
+
+Typicke pouziti v notebooku:
+
+```python
+from doris.analysis.stations.loading import load_station_dataframe
+
+df = load_station_dataframe(
+    "data/stcd/gop25wd04/gop25wd04.stcd.licb",
+    start="2015-01-01",
+    end="2025-12-31",
+    fill_gaps=True,
+    keep_xyz=False,
+)
+```
+
+Co vraci:
+
+- `MJD` jako puvodni casovy sloupec,
+- `Date` jako datetime,
+- `year` jako decimalni rok,
+- ENU slozky `dE`, `dN`, `dU` a nejistoty `sE`, `sN`, `sU`,
+- volitelne i karteske slozky `dX`, `dY`, `dZ`, `sX`, `sY`, `sZ`, pokud `keep_xyz=True`.
+
+Vychozi `keep_xyz=False` je zamerne, protoze analyza v notebooku pracuje hlavne
+s lokalnim ENU systemem. Karteske slozky jsou ale porad dostupne pro kontrolu nebo
+specialni vypocty pres `keep_xyz=True`.
+
+Metadata uklada do `df.attrs`, zejmena:
+
+- `source_file`,
+- `mjd_column`,
+- `time_column`,
+- `regularize`, pokud se doplnovaly mezery,
+- `load_station` s parametry nacitani.
+
+`df.attrs["load_station"]` je prakticke hlavne pri ladeni, protoze rika, z jakeho
+souboru tabulka vznikla, jake casove okno bylo aplikovano, zda se vyplnovaly mezery,
+zda zustaly XYZ sloupce a kolik radku vysledek obsahuje.
+
+#### `_stcd_reader.py`
+
+- `read_stcd_to_dataframe(path)` parsuje STCD soubor do pandas DataFrame.
+- Najde zacatek datove casti, precte sloupce a ulozi metadata o zdrojovem souboru.
+- STCD soubor je plain-text tabulka s promennou textovou hlavickou; reader proto
+  nejdriv hleda prvni numericky radek a az od nej vola `pandas.read_csv()`.
+- Ocekavany pevny sloupcovy format je:
+
+```text
+MJD, dX, dY, dZ, sX, sY, sZ, dE, dN, dU, sE, sN, sU
+```
+
+- Vsechny sloupce prevadi na cisla, seradi podle `MJD` a do `df.attrs` uklada
+  `source_file` a `mjd_column`.
+- Pokud soubor neexistuje, neni soubor, nema datove radky nebo se neprecte do
+  ocekavaneho tvaru, vyhodi explicitni chybu.
+
+#### `_time_convert.py`
+
+- `add_time_columns(df)` prevadi `MJD` na `Date` a decimalni `year`.
+- Interni `_mjd_to_datetime()` a `_decimal_year()` drzi samotne prevody.
+- `Date` je vlozen hned za `MJD`.
+- `year` je decimalni rok, ktery spravne bere v uvahu delku konkretniho roku
+  vcetne prestupnych let.
+- `df.attrs["time_column"]` se nastavi na `"Date"`.
+
+#### `_regularize.py`
+
+- `infer_mjd_step(df)` odhaduje typicky krok casove rady v MJD dnech.
+- `regularize_mjd_grid(df, ...)` doplni chybejici epochy jako radky s `NaN`, aby navazujici analyza videla mezery explicitne.
+- Krok se urcuje z rozdilu serazenych unikatnich hodnot `MJD`; rozdily se zaokrouhli
+  na cele dny a vybere se nejcastejsi krok.
+- Pri remapovani na pravidelnou mrizku se z prvni do posledni epochy vytvori nova
+  osa a puvodni data se na ni reindexuji.
+- Nove doplnene epochy maji v datovych sloupcich `NaN`, ale `Date` a `year` se
+  znovu dopocitaji z `MJD`, aby byly grafy a filtry pouzitelne.
+- Metadata `regularize` obsahuji `step_days`, `rows_added` a `inferred_step`.
+- Smysl kroku je metodicky dulezity: detekce skoku a spektralni/rezidualni workflow
+  pak neignoruje tiche mezery v pozorovanich.
+
+### `stations/discontinuities`
+
+Detekce skoku a diskontinuit ve stanicnich casovych radach.
+Tahle cast vyjmula puvodni experimenty z notebooku do opakovatelneho API.
+Notebook tak nemusi obsahovat vlastni implementaci metod a muze jen vybrat vstupni
+rezidualni radu, zavolat detektory, vykreslit mezivysledky a exportovat tabulky.
+
+Verejny import:
+
+```python
+from doris.analysis.stations.discontinuities import (
+    detect_jumps_sliding_window,
+    detect_jumps_lowess,
+    JumpDetectionResult,
+)
+```
+
+#### `detect.py`
+
+- `detect_jumps_sliding_window(years, values, window_size=40, shift=40, ...)` porovnava dve sousedni klouzave okenni statistiky.
+- `detect_jumps_lowess(years, values, frac=0.2, ...)` vyhladi radu pomoci LOWESS a hleda velke derivace.
+- Oba detektory podporuji heuristicky prah a statisticky rezim (`t_test` nebo `z_test` podle metody).
+- Vstupy jsou `numpy`-kompatibilni pole casu v decimalnich letech a hodnot rady, typicky aperiodicke residualy v mm.
+
+Obecny vstupni tvar:
+
+```python
+years = df["year"].to_numpy()
+values = df["aper_dU"].fillna(0).to_numpy()
+```
+
+`years` a `values` musi mit stejnou delku. Detektory samy nevyplnuji `NaN`;
+notebook pred volanim explicitne pouziva napr. `fillna(0)`, aby bylo jasne, jak se
+s chybejicimi hodnotami zachazi.
+
+`detect_jumps_sliding_window(...)`
+
+```python
+result = detect_jumps_sliding_window(
+    years,
+    values,
+    window_size=40,
+    shift=40,
+    threshold_mode="t_test",
+    sigma_mult=1.0,
+    alpha=0.05,
+)
+```
+
+Logika:
+
+- pro kazdou pozici vezme prvni okno `seg1` delky `window_size`,
+- druhe okno `seg2` zacina o `shift` vzorku pozdeji,
+- spocita prumer obou oken `mu1`, `mu2`,
+- cas skoku reprezentuje stred mezi casovymi stredu obou oken,
+- v rezimu `heuristic` oznaci skok, kdyz `abs(mu2 - mu1) > sigma_mult * sigma`,
+- v rezimu `t_test` pouzije Welchuv dvouvyberovy t-test a oznaci skok, kdyz `p < alpha`.
+
+Dulezite parametry:
+
+- `window_size` urcuje, jak dlouhy usek se v kazdem kroku prumeruje.
+- `shift` urcuje vzdalenost mezi porovnavanymi okny.
+- `threshold_mode="heuristic"` reprodukuje jednodussi notebookovou logiku.
+- `threshold_mode="t_test"` dava prahovani statisticky vyznamem pres `alpha`.
+- `sigma_mult` se pouziva jen u heuristiky.
+- `alpha` se pouziva u t-testu.
+
+`detect_jumps_lowess(...)`
+
+```python
+result = detect_jumps_lowess(
+    years,
+    values,
+    frac=0.2,
+    threshold_mode="z_test",
+    k_sigma=2.0,
+    min_abs=3.0,
+    alpha=0.05,
+)
+```
+
+Logika:
+
+- hodnoty se vyhladi metodou LOWESS ze `statsmodels`,
+- z vyhlazene rady se spocte numericka derivace `slope = diff(smoothed) / diff(years)`,
+- cas derivace lezi ve stredech sousednich epoch `t_mid`,
+- robustni meritko rozptylu derivace se urci pomoci MAD,
+- v rezimu `heuristic` je prah `max(min_abs, k_sigma * sigma_slope)`,
+- v rezimu `z_test` je prah `max(min_abs, z_(alpha/2) * sigma_slope)`,
+- skoky jsou epochy, kde `abs(slope)` prekroci prah.
+
+Dulezite parametry:
+
+- `frac` je sirka LOWESS vyhlazeni jako podil delky dat; mensi hodnota zachova vice detailu.
+- `min_abs` brani prehnane citlive detekci u velmi hladkych rad.
+- `k_sigma` se pouziva jen u heuristickeho rezimu.
+- `alpha` se pouziva u `z_test`.
+
+Vysledky obou detektoru se v notebooku ukladaji po komponentach:
+
+```python
+sw_results = {"dE": result_e, "dN": result_n, "dU": result_u}
+lw_results = {"dE": result_e, "dN": result_n, "dU": result_u}
+```
+
+#### `_result.py`
+
+- `JumpDetectionResult` uklada `jumps`, `method`, `threshold`, `threshold_mode`, `alpha` a `extras`.
+- Je to spolecny vystup obou detekcnich metod.
+- `len(result)` vraci pocet nalezenych skoku.
+- `repr(result)` dava rychly ladici souhrn: metoda, pocet skoku, rezim prahu a hodnota prahu.
+- `jumps` je `np.ndarray` decimalnich roku.
+- `threshold` je ciselny prah pouzity v dane metode; u t-testu je to v implementaci stale
+  heuristicka hodnota pro konzistenci vystupu, zatimco samotne rozhodnuti ridi `p < alpha`.
+- `extras` je zamerne bohate, aby notebook mohl reprodukovat diagnosticke grafy bez
+  prepoctu detekce.
+
+`extras` pro sliding window:
+
+- `mu1`, `mu2` - prumery prvniho a druheho okna,
+- `years1`, `years2` - casove stredu oken,
+- `sigma` - globalni smerodatna odchylka vstupu,
+- `pvalues` - p-hodnoty Welchova testu nebo `None` pri heuristice,
+- `window_size`, `shift` - parametry pouzite v behu.
+
+`extras` pro LOWESS:
+
+- `smoothed` - vyhlazena rada,
+- `t_mid` - casy derivace,
+- `slope` - odhad derivace,
+- `sigma_slope` - robustni rozptyl derivace,
+- `frac`, `min_abs` - parametry pouzite v behu.
+
+#### `_sliding_window.py` a `_lowess_deriv.py`
+
+- `_sliding_window()` obsahuje vlastni porovnani sousednich oken.
+- `_lowess_derivative()` pocita LOWESS vyhlazeni, derivaci a prahovani.
+- Tyto soubory jsou interni implementacni vrstva; z notebooku se ma sahat hlavne na funkce z `detect.py`.
+- Oddeleni verejne vrstvy (`detect.py`) a numerickeho jadra (`_sliding_window.py`,
+  `_lowess_deriv.py`) umoznuje jednoduse menit format vysledku, aniž by se musela
+  menit samotna matematicka cast.
 
 ## `src/doris/analysis/spectral`
 
@@ -1162,6 +1417,298 @@ Hlavni orbitni API exportuje napric podbalicky:
 - `build_rtn_frame`, `project_to_rtn`
 - `compare_trajectories`, `orbit_diff_stats`, `orbit_diff_summary`
 
+## `src/doris/output/tables`
+
+Export tabulek do ruznych vystupnich formatu. Aktualne je implementovany LaTeX export.
+Tenhle modul vznikl kvuli workflow v notebooku: tabulku je potreba rychle vygenerovat
+z `pandas.DataFrame`, zkontrolovat jeji LaTeX zdroj primo pres `print()` a teprve potom
+ji ulozit do projektu bez rucniho otevirani `.tex` souboru.
+
+Princip struktury:
+
+```text
+src/doris/output/
+  tables/
+    __init__.py
+    latex.py
+  plots/
+```
+
+`tables/` je hlavni domena: pracuje s tabulkami jako vystupnim artefaktem.
+`latex.py` je konkretni format exportu. To je cistsi nez starsi struktura
+`output/latex/tables.py`, protoze LaTeX neni hlavni domena, ale format tabulkoveho
+vystupu.
+
+Nove doporucene importy:
+
+```python
+from doris.output.tables import Col, save_latex_table
+```
+
+nebo explicitne podle formatu:
+
+```python
+from doris.output.tables.latex import save_latex_table
+```
+
+### `tables/latex.py`
+
+- `Col(source, header, decimals)` popisuje jeden vystupni sloupec: zdrojovy nazev, LaTeX hlavicku a pocet desetinych mist.
+- `make_latex_table(df, cols, ...)` vytvori LaTeX zdroj tabulky bez zapisu na disk.
+- `print_latex_table(df, cols, ...)` vytvori LaTeX zdroj, vypise ho pres `print()` a vrati stejny string.
+- `save_latex_table(df, path, cols, ...)` vytvori tabulku, zalozi cilove adresare a zapise `.tex` soubor.
+- Relativni `path` se uklada pod projektove `LaTeX/tables`; pripona `.tex` se doplni automaticky.
+- `latex_table_path(...)` sklada cesty pod `LaTeX/tables` nebo zrcadli cestu existujiciho grafu z `LaTeX/images`.
+- Export pouziva `pandas.DataFrame.to_latex()` a podporuje `caption`, `label`, `escape`, `index` a `position`.
+
+#### Cile API
+
+Modul resi tri oddelene potreby:
+
+1. vyrobit LaTeX string bez zapisu na disk,
+2. jednoduse ho vypsat v notebooku pres `print`,
+3. ulozit stejny text do `.tex` souboru v projektove strukture.
+
+Diky tomu je format tabulek laditelny primo v kodu:
+
+```python
+tex = make_latex_table(df, cols=[...])
+print(tex)
+```
+
+nebo jeste kratsi:
+
+```python
+print_latex_table(df, cols=[...])
+```
+
+Pri finalnim ulozeni se pouziva stejny generator, takze to, co se vytiskne do
+notebooku, je presne to, co skonci v `.tex` souboru.
+
+#### `Col`
+
+`Col` je `NamedTuple`:
+
+```python
+Col(source, header, decimals)
+```
+
+Vyznamenani poli:
+
+- `source` je nazev sloupce v puvodnim DataFrame.
+- `header` je hlavicka v LaTeX tabulce. Muze obsahovat i LaTeX matematiku,
+  napr. `$R^2$`.
+- `decimals` urcuje pocet desetinych mist. Pokud je `None`, hodnota se neformatuje
+  jako desetinne cislo a zustava vhodna pro text, integer nebo uz predformatovany
+  string.
+
+Priklad vyberu a poradi sloupcu:
+
+```python
+cols = [
+    Col("comp", "Slozka", None),
+    Col("jumps", "Epochy [rok]", None),
+    Col("threshold", "Prah [mm]", 2),
+]
+```
+
+To znamena:
+
+- do tabulky se vezmou jen sloupce `comp`, `jumps`, `threshold`,
+- poradi ve vystupu bude presne podle seznamu `cols`,
+- v LaTeXu se prejmenuji na `Slozka`, `Epochy [rok]`, `Prah [mm]`,
+- `threshold` se zaokrouhli/formatuje na dve desetinna mista.
+
+#### `make_latex_table`
+
+`make_latex_table(df, cols, caption="", label="", escape=False, index=False, position="htbp")`
+
+Co dela:
+
+- prevede polozky `cols` na objekty `Col`,
+- overi, ze vsechny `source` sloupce existuji v DataFrame,
+- vytvori kopii DataFrame jen s vybranymi sloupci,
+- numericke sloupce s nastavenym `decimals` preformatuje na string s danym poctem mist,
+- prejmenuje sloupce podle `header`,
+- zavola `DataFrame.to_latex()`,
+- vrati kompletni LaTeX zdroj jako `str`.
+
+Pokud sloupec chybi, vyhodi `KeyError` se seznamem chybejicich a dostupnych sloupcu.
+To je uzitecne v notebooku, protoze chyba hned rekne, jestli se preklepl nazev sloupce.
+
+`escape=False` je vychozi, aby fungovaly hlavicky jako `$R^2$`. Pokud by se vkladaly
+bezne textove hlavicky a bylo potreba automaticke escapovani LaTeX specialnich znaku,
+da se prepnout na `escape=True`.
+
+Zarovnani sloupcu se odvozuje automaticky:
+
+- textove/neformatovane sloupce jsou vlevo,
+- numericke sloupce s `decimals` jsou vpravo,
+- pokud `index=True`, index se prida jako levy sloupec.
+
+#### `print_latex_table`
+
+`print_latex_table(...)` je mala ladici zkratka:
+
+```python
+tex = print_latex_table(df, cols, caption="...")
+```
+
+Interni tok:
+
+```text
+df + cols
+  -> make_latex_table()
+  -> print(latex)
+  -> return latex
+```
+
+Je vhodna, kdyz se tabulka zatim nema zapisovat na disk a jde jen o doladeni hlavicek,
+poradi sloupcu, popisku nebo zaokrouhleni.
+
+#### `save_latex_table`
+
+`save_latex_table(df, path, cols, ..., tables_root=None, print_preview=False)`
+
+Interni tok:
+
+```text
+df + cols
+  -> make_latex_table()
+  -> resolve output path
+  -> create parent directories
+  -> write .tex
+  -> optional print(latex)
+  -> return latex
+```
+
+Dulezite chovani:
+
+- Vraci LaTeX zdroj jako `str`, ne cestu. To umoznuje:
+
+```python
+tex = save_latex_table(...)
+print(tex)
+```
+
+- Pokud `path` nema priponu, automaticky se doplni `.tex`.
+- Pokud `path` je relativni, uklada se pod `DEFAULT_TABLES_ROOT`, tedy
+  `PROJECT_ROOT/LaTeX/tables`.
+- Pokud `path` je absolutni, pouzije se presne zadana cesta.
+- Pokud `print_preview=True`, funkce rovnou vytiskne stejny LaTeX zdroj, ktery zapisuje.
+- `tables_root` dovoluje zmenit koren pro relativni cesty, ale bezne neni potreba.
+
+#### `latex_table_path`
+
+`latex_table_path(...)` je pomocnik pro skladani cest pod `LaTeX/tables`.
+
+Explicitni varianta:
+
+```python
+latex_table_path("results", "stations", "licb", filename="trend")
+```
+
+vrati:
+
+```text
+LaTeX/tables/results/stations/licb/trend.tex
+```
+
+Varianta zrcadleni podle grafu:
+
+```python
+latex_table_path(image_path="LaTeX/images/results/stations/licb/plot.pdf")
+```
+
+vrati:
+
+```text
+LaTeX/tables/results/stations/licb/plot.tex
+```
+
+Smysl je drzet tabulky ve stejne logicke strukture jako PDF grafy, jen pod
+`LaTeX/tables` misto `LaTeX/images`.
+
+Typicke pouziti:
+
+```python
+from doris.output.tables import Col, save_latex_table
+
+tex = save_latex_table(
+    trend_df,
+    "results/stations/licb/licb_trend",
+    cols=[
+        Col("axis", "Slozka", None),
+        Col("slope", "Smernice [mm/rok]", 3),
+        Col("r2", "$R^2$", 3),
+    ],
+    caption="Linearni trend stanice LICB",
+    label="tab:licb_trend",
+    print_preview=True,
+)
+```
+
+Typicky notebookovy ladici postup:
+
+```python
+cols = [
+    Col("comp", "Slozka", None),
+    Col("jumps", "Epochy [rok]", None),
+    Col("threshold", "Prah [mm]", 2),
+]
+
+# 1) jen zobrazit v notebooku
+tex = make_latex_table(df_sw, cols, caption="Skoky")
+print(tex)
+
+# 2) ulozit a zaroven zobrazit presne ulozeny zdroj
+tex = save_latex_table(
+    df_sw,
+    "results/stations/licb/jumps_sliding_window",
+    cols=cols,
+    caption="Skoky",
+    label="tab:licb_jumps_sw",
+    print_preview=True,
+)
+```
+
+### `__init__.py`
+
+`src/doris/output/tables/__init__.py` re-exportuje hlavni tabulkove API:
+
+- `Col`
+- `DEFAULT_TABLES_ROOT`
+- `latex_table_path`
+- `make_latex_table`
+- `print_latex_table`
+- `save_latex_table`
+
+### Proc tu neni `output/csv`
+
+Samostatny CSV exportni modul se zatim nezavadi. Pokud by pouze obaloval
+`pandas.DataFrame.to_csv()`, rozsiroval by API bez skutecne projektove logiky navic.
+
+Doporuceny notebookovy zapis je explicitni pandas workflow:
+
+```python
+EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+df.to_csv(EXPORT_DIR / "name.csv", index=False)
+```
+
+Wrapper pro CSV by mel smysl teprve ve chvili, kdy by opakovane resil neco
+projektove specifickeho, napr.:
+
+- jednotne skladani cest do `data/.../exports/...`,
+- jednotny `float_format`,
+- zapis metadat vedle CSV,
+- validaci povinnych sloupcu,
+- export vice souvisejicich CSV najednou,
+- konzistentni nazvy souboru podle `solution`, `product`, `station` nebo `satellite`.
+
+Do te doby zustava CSV export primo v noteboocich pres pandas a knihovni `output`
+obsahuje jen veci, ktere pridavaji vlastni projektovou hodnotu: graficke helpery
+a LaTeX tabulky.
+
 ## `src/doris/output/plots`
 
 Pomocne funkce pro konzistentni osy grafu.
@@ -1195,6 +1742,304 @@ Navazuje na stanicni STCD data a pouziva `doris.analysis.spectral` pro FFT perio
 
 Trendova analyza stanicnich dat. Pracuje s vybranou stanici, vyrabi detrendovane rady, trendove tabulky a grafy.
 
+### `notebooks/stations/trend_detection_load_with_doris.ipynb`
+
+Varianta trendove analyzy, ktera vyuziva knihovni loader `doris.analysis.stations.loading.load_station_dataframe`.
+Slouzi jako prechod od starsi notebookove logiky k workflow, kde nacteni STCD dat,
+prevod casu a regularizaci resi knihovna. Notebook se tim zkracuje na analyzu a grafiku.
+
+Hlavni myslenka:
+
+```text
+STCD file
+  -> load_station_dataframe()
+  -> trend detection / detrending
+  -> residual exports
+  -> figures
+```
+
+Prakticky prinos:
+
+- mene kopirovaneho kodu mezi notebooky,
+- jednotny format sloupcu `MJD`, `Date`, `year`, `dE`, `dN`, `dU`,
+- jednotny zpusob vyplneni mezer v casove rade,
+- jednodussi navazani na spektralni analyzu a detekci skoku.
+
+### `notebooks/stations/Jump_detection.ipynb`
+
+Notebook pro puvodni/experimentacni detekci skoku ve stanicnich radach.
+
+### `notebooks/stations/Jump_detection_with_doris.ipynb`
+
+Varianta detekce skoku postavena nad knihovnim API `doris.analysis.stations.discontinuities`.
+
+Aktualni ukazkovy notebook pro nove veci kolem detekce diskontinuit a exportu
+LaTeX tabulek. Je napsany tak, aby bylo jasne oddelene:
+
+1. nastaveni datasetu a parametru,
+2. nacteni rezidualni rady,
+3. detekce skoku metodou klouzaveho okna,
+4. detekce skoku pomoci LOWESS derivace,
+5. porovnani s breakpointy z `fit_piecewise_trend`,
+6. export prehledovych LaTeX tabulek s okamzitym preview v notebooku.
+
+#### Importy
+
+Notebook si nejdriv prida `src/` do `sys.path` a importuje:
+
+```python
+from doris.analysis.stations.trend import fit_piecewise_trend
+from doris.analysis.stations.discontinuities import (
+    detect_jumps_sliding_window,
+    detect_jumps_lowess,
+)
+from doris.output.tables import Col, save_latex_table
+```
+
+Tzn. samotna detekce i export tabulek uz nejdou pres lokalni notebookove helpery,
+ale pres knihovni API.
+
+#### Nastaveni datasetu
+
+Dulezite promenne:
+
+- `PRODUCT = "stcd"` - typ produktu,
+- `SOLUTION = "gop25wd04"` - zpracovani/reseni,
+- `STATION = "LICB"` - analyzovana stanice,
+- `TREND_VARIANT = "weighted_multiseg"` - varianta trendu pouzita pro predchozi detrending,
+- `COMPONENTS = ["dE", "dN", "dU"]` - analyzovane ENU slozky,
+- `INPUT_TYPE = "detr"` nebo `"aper"` - vyber vstupni rezidualni rady.
+
+Vstupni typ:
+
+- `"aper"` znamena aperiodicke residualy, tedy trend i periodicity uz jsou odectene,
+- `"detr"` znamena detrendovane residualy, tedy odecteny je trend, ale periodicity zustavaji.
+
+Notebook podle toho vybere prefix sloupcu:
+
+```python
+col = "aper" if INPUT_TYPE == "aper" else "res"
+```
+
+a pak pracuje se sloupci:
+
+```text
+aper_dE / aper_dN / aper_dU
+nebo
+res_dE / res_dN / res_dU
+```
+
+#### Cesty
+
+Notebook pouziva tyto koreny:
+
+```python
+PROJECT_ROOT = Path("../..").resolve()
+DATA_DIR     = PROJECT_ROOT / "data" / PRODUCT / SOLUTION
+EXPORT_DIR   = DATA_DIR / "exports" / STATION.lower()
+IMAGES_DIR   = PROJECT_ROOT / "LaTeX" / "images" / "results" / "stations" / STATION.lower()
+```
+
+Tabulky jsou zamerne zrcadlene pod `LaTeX/tables`:
+
+```python
+TABLES_REL_DIR = Path("results") / "stations" / STATION.lower()
+TABLES_DIR = PROJECT_ROOT / "LaTeX" / "tables" / TABLES_REL_DIR
+PRINT_TABLE_PREVIEW = True
+```
+
+Takze pro LICB se uklada do:
+
+```text
+LaTeX/tables/results/stations/licb/
+```
+
+To odpovida obrazkum v:
+
+```text
+LaTeX/images/results/stations/licb/
+```
+
+#### Vstupni CSV
+
+Notebook ocekava export z predchozi trendove/spektralni casti:
+
+```python
+APER_CSV = EXPORT_DIR / f"{BASE_NAME}_aper_{TREND_VARIANT}.csv"
+```
+
+Pro aktualni nastaveni jde typicky o:
+
+```text
+data/stcd/gop25wd04/exports/licb/gop25wd04_stcd_licb_aper_weighted_multiseg.csv
+```
+
+Pokud soubor neexistuje, notebook vypise dostupne kandidaty `*_aper_*.csv`, aby bylo
+rychle videt, jaky export je ve slozce k dispozici.
+
+#### Metoda 1: sliding window
+
+Pro kazdou slozku `dE`, `dN`, `dU`:
+
+```python
+y = df_aper[f"{col}_{comp}"].fillna(0).to_numpy()
+sw_results[comp] = detect_jumps_sliding_window(...)
+```
+
+Pouzite parametry v konfiguracni bunce:
+
+- `window_size`,
+- `shift`,
+- `sw_mode`,
+- `sigma_mult`,
+- `sw_alpha`.
+
+Graf pro kazdou slozku zobrazuje:
+
+- rezidualni radu,
+- prumery prvniho okna `mu1`,
+- prumery druheho okna `mu2`,
+- svisle cary nalezenych skoku.
+
+Data pro graf berou z `JumpDetectionResult.extras`, hlavne `years1`, `years2`,
+`mu1`, `mu2`, `window_size` a `shift`.
+
+#### Metoda 2: LOWESS + derivace
+
+Pro kazdou slozku:
+
+```python
+y = df_aper[f"{col}_{comp}"].fillna(0).to_numpy()
+lw_results[comp] = detect_jumps_lowess(...)
+```
+
+Pouzite parametry:
+
+- `frac_lowess`,
+- `lw_mode`,
+- `k_sigma_slope`,
+- `min_slope_abs`,
+- `lw_alpha`.
+
+Graf pro kazdou slozku zobrazuje:
+
+- rezidualni radu,
+- LOWESS vyhlazenou krivku,
+- svisle cary nalezenych skoku,
+- rezim prahu v titulku grafu.
+
+Mezivysledky pro graf jsou v `extras`: `smoothed`, `t_mid`, `slope`, `sigma_slope`,
+`frac` a `min_abs`.
+
+#### Metoda 3: BIC piecewise trend
+
+Treti cast neni samostatny jump detector, ale porovnavaci trendovy postup:
+
+```python
+result = fit_piecewise_trend(years, y, max_segments=None)
+```
+
+Pro kazdou slozku uklada:
+
+- `result.breakpoints`,
+- `result.n_segments`,
+- `result.bic`,
+- `result.fitted`.
+
+Graf zobrazuje puvodni rezidualni radu, po castech linearni fit a svisle cary
+breakpointu. V mapovani vysledku je ulozen jako `bic_results[comp]`.
+
+#### Export tabulek v notebooku
+
+Zaver notebooku vytvari tri souhrnne DataFrame:
+
+- `df_sw` pro sliding-window detekci,
+- `df_lw` pro LOWESS detekci,
+- `df_bic` pro BIC breakpointy.
+
+Kazdy DataFrame ma jasne minimalni sloupce:
+
+```text
+df_sw:  comp, jumps, n, threshold, mode
+df_lw:  comp, jumps, n, threshold, mode
+df_bic: comp, breakpoints, n_segments, bic
+```
+
+Pole skoku se pred exportem formatuje pomoci `_fmt_epochs(arr)` na string
+s decimalnimi roky, napr.:
+
+```text
+2020.123, 2021.456
+```
+
+Pokud nejsou nalezeny zadne skoky, zapisuje se `"--"`.
+
+Tabulky se definuji v seznamu `table_specs`. Kazda polozka obsahuje:
+
+```text
+(df_table, rel_path, cols, caption, label)
+```
+
+kde:
+
+- `df_table` je zdrojovy DataFrame,
+- `rel_path` je relativni cesta pod `LaTeX/tables`,
+- `cols` je seznam `Col(...)`,
+- `caption` je popisek tabulky,
+- `label` je LaTeX label.
+
+Priklad jedne definice:
+
+```python
+(
+    df_sw,
+    TABLES_REL_DIR / f"{IMAGE_NAME}_jumps_sliding_window",
+    [
+        Col("comp", "Slozka", None),
+        Col("jumps", "Epochy [rok]", None),
+        Col("n", "Pocet", None),
+        Col("threshold", "Prah [mm]", 2),
+        Col("mode", "Rezim", None),
+    ],
+    "... caption ...",
+    f"tab:{IMAGE_NAME}_jumps_sw",
+)
+```
+
+Samotny export:
+
+```python
+latex_tables = {}
+for df_table, rel_path, cols, caption, label in table_specs:
+    print(f"\n--- {rel_path.name}.tex ---")
+    latex_tables[rel_path.name] = save_latex_table(
+        df_table,
+        rel_path,
+        cols=cols,
+        caption=caption,
+        label=label,
+        print_preview=PRINT_TABLE_PREVIEW,
+    )
+```
+
+Diky `print_preview=True` se v outputu notebooku rovnou ukaze LaTeX zdroj, tedy
+neni potreba otevirat `.tex` soubor jen kvuli kontrole formatu.
+
+Vystupni soubory:
+
+```text
+LaTeX/tables/results/stations/licb/gop25wd04_stcd_licb_jumps_sliding_window.tex
+LaTeX/tables/results/stations/licb/gop25wd04_stcd_licb_jumps_lowess.tex
+LaTeX/tables/results/stations/licb/gop25wd04_stcd_licb_jumps_bic.tex
+```
+
+`latex_tables` drzi i texty tabulek jako Python stringy, takze je lze dale vypsat,
+porovnat, vlozit do dalsi bunky nebo rychle zkontrolovat:
+
+```python
+print(latex_tables["gop25wd04_stcd_licb_jumps_bic"])
+```
+
 ### `notebooks/satellites/download_cddis.ipynb`
 
 Stahovani satelitnich/orbitnich dat z CDDIS.
@@ -1207,9 +2052,25 @@ Kopirovani orbitnich dat z lokalni slozky pres `doris.input.local`.
 
 Stahovani orbitnich dat pres SSH/SFTP pres `doris.input.ssh`.
 
+### `notebooks/satellites/compare_orbit_solutions_hermite.ipynb`
+
+Porovnani orbitnich reseni pomoci knihovni Hermitovy interpolace a RTN rozdilu.
+
+### `notebooks/satellites/compare_orbit_solutions_bernese.ipynb`
+
+Porovnani orbitnich reseni ve stylu Bernese/dynamicke parametrizace.
+
+### `notebooks/satellites/hermite_bernese_comparison.ipynb`
+
+Primy porovnavaci notebook mezi Hermitovou interpolaci a Bernese/dynamickym postupem.
+
 ### `notebooks/tests/hermite_interpolation_accuracy.ipynb`
 
 Validacni notebook pro presnost Hermitovy interpolace orbit.
+
+### `notebooks/tests/dynamic_parametrisation_accuracy.ipynb`
+
+Validacni notebook pro presnost dynamicke parametrizace/Bernese porovnani orbit.
 
 ### `notebooks/tests/periodograms_test.ipynb`
 
@@ -1236,6 +2097,92 @@ realistickeho sumu, vykresleni samotneho sumu a nakonec slozeni finalnich testov
 dat jako periodicita plus sum.
 
 Grafy v notebooku maji ceske popisy a ukladaji se jako PDF do `LaTeX/images/test/`.
+
+## LaTeX vystupy
+
+### `LaTeX/images/`
+
+Slozka s obrazovymi vystupy pro text prace. Aktualni strom obsahuje hlavne:
+
+- `logo_CVUT/` - loga CVUT ve formatu PDF/EPS,
+- `zadani/` - PDF zadani,
+- `Stations/LICB/` - starsi/vychozi grafy pro stanici LICB,
+- `results/stations/licb/` - vysledkove grafy trendu, residualu, LOWESS/sliding-window a periodogramu stanice LICB,
+- `results/satellites/hermite/` - vysledky orbitnich porovnani Hermitovou interpolaci,
+- `results/satellites/bernese/` - vysledky Bernese/dynamickeho porovnani,
+- `results/satellites/comparison/` - primy Hermite vs. Bernese comparison,
+- `test/periodicities/` - grafy ze synteticke spektralni validace,
+- `test/hermite_precision/ssa/srl/` - grafy presnosti Hermitovy interpolace,
+- `test/dynamic_precision/` - grafy presnosti dynamicke parametrizace.
+
+### `LaTeX/tables/`
+
+Slozka pro samostatne `.tex` tabulky urcene k vlozeni do textu prace pres `\input{...}`.
+Je analogicka ke slozce `LaTeX/images`, jen misto PDF obrazku obsahuje LaTeX zdroje
+tabulek.
+
+Aktualni konvence:
+
+```text
+LaTeX/
+  images/
+    results/
+      stations/
+        licb/
+          *.pdf
+  tables/
+    results/
+      stations/
+        licb/
+          *.tex
+```
+
+Tuhle konvenci podporuje `doris.output.tables.save_latex_table()`:
+
+```python
+save_latex_table(
+    df,
+    "results/stations/licb/table_name",
+    cols=[...],
+)
+```
+
+ulozi:
+
+```text
+LaTeX/tables/results/stations/licb/table_name.tex
+```
+
+V notebooku `Jump_detection_with_doris.ipynb` se sem ukladaji tri tabulky:
+
+- `gop25wd04_stcd_licb_jumps_sliding_window.tex`,
+- `gop25wd04_stcd_licb_jumps_lowess.tex`,
+- `gop25wd04_stcd_licb_jumps_bic.tex`.
+
+Prakticky rozdil proti grafum:
+
+- grafy jsou binarni/finalni PDF vystupy,
+- tabulky jsou textove `.tex` vystupy,
+- tabulky je mozne okamzite kontrolovat v notebooku pres `print_preview=True`,
+- stejny LaTeX string, ktery se tiskne, se uklada na disk.
+
+Typicky workflow exportu tabulky:
+
+```text
+pandas DataFrame
+  -> vybrat sloupce pres Col(...)
+  -> make_latex_table()
+  -> print preview v notebooku
+  -> save_latex_table()
+  -> \input{LaTeX/tables/.../table.tex} v textu prace
+```
+
+Pri psani prace je vhodne v LaTeXu odkazovat relativne podle struktury hlavniho
+`.tex` dokumentu, napr.:
+
+```latex
+\input{tables/results/stations/licb/gop25wd04_stcd_licb_jumps_bic.tex}
+```
 
 ## Data a soukrome soubory
 
