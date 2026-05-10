@@ -48,6 +48,24 @@ class Col(NamedTuple):
     decimals: int | None
 
 
+def _inject_preamble(latex: str, *, centering: bool, font_size: str) -> str:
+    """Insert ``\\centering`` and/or a font-size command after ``\\begin{table}[...]``."""
+    extras = []
+    if centering:
+        extras.append("\\centering")
+    if font_size:
+        extras.append(font_size)
+    if not extras:
+        return latex
+
+    lines = latex.split("\n")
+    for i, line in enumerate(lines):
+        if line.startswith(r"\begin{table}"):
+            lines = lines[: i + 1] + extras + lines[i + 1 :]
+            break
+    return "\n".join(lines)
+
+
 def _coerce_cols(cols: Iterable[Col | tuple]) -> list[Col]:
     return [c if isinstance(c, Col) else Col(*c) for c in cols]
 
@@ -131,7 +149,9 @@ def make_latex_table(
     label: str = "",
     escape: bool = False,
     index: bool = False,
-    position: str = "htbp",
+    position: str = "H",
+    centering: bool = True,
+    font_size: str = "",
 ) -> str:
     """Build a booktabs LaTeX table string from *df* without writing any file.
 
@@ -158,6 +178,13 @@ def make_latex_table(
         Whether to include the DataFrame index.  Default ``False``.
     position : str
         LaTeX placement specifier, e.g. ``"htbp"`` or ``"H"``.
+    centering : bool
+        If ``True`` (default), insert ``\\centering`` after
+        ``\\begin{table}[...]``.
+    font_size : str
+        Optional LaTeX font-size command inserted after ``\\centering``,
+        e.g. ``"\\small"`` or ``"\\footnotesize"``.
+        Empty string (default) omits the command.
 
     Returns
     -------
@@ -184,7 +211,7 @@ def make_latex_table(
 
     out = out.rename(columns={c.source: c.header for c in cols})
 
-    return out.to_latex(
+    latex = out.to_latex(
         index=index,
         caption=caption or None,
         label=label or None,
@@ -192,6 +219,7 @@ def make_latex_table(
         position=position,
         column_format=align,
     )
+    return _inject_preamble(latex, centering=centering, font_size=font_size)
 
 
 def print_latex_table(
@@ -202,7 +230,9 @@ def print_latex_table(
     label: str = "",
     escape: bool = False,
     index: bool = False,
-    position: str = "htbp",
+    position: str = "H",
+    centering: bool = True,
+    font_size: str = "",
 ) -> str:
     """Print a LaTeX table for notebook debugging and return the same string."""
     latex = make_latex_table(
@@ -213,6 +243,8 @@ def print_latex_table(
         escape=escape,
         index=index,
         position=position,
+        centering=centering,
+        font_size=font_size,
     )
     print(latex)
     return latex
@@ -227,7 +259,9 @@ def save_latex_table(
     label: str = "",
     escape: bool = False,
     index: bool = False,
-    position: str = "htbp",
+    position: str = "H",
+    centering: bool = True,
+    font_size: str = "",
     tables_root: Path | str | None = None,
     print_preview: bool = False,
 ) -> str:
@@ -271,6 +305,13 @@ def save_latex_table(
         Whether to include the DataFrame index.  Default ``False``.
     position : str
         LaTeX placement specifier, e.g. ``"htbp"`` or ``"H"``.
+    centering : bool
+        If ``True`` (default), insert ``\\centering`` after
+        ``\\begin{table}[...]``.
+    font_size : str
+        Optional LaTeX font-size command inserted after ``\\centering``,
+        e.g. ``"\\small"`` or ``"\\footnotesize"``.
+        Empty string (default) omits the command.
     tables_root : Path or str, optional
         Base directory used for relative output paths.  Defaults to the
         project-level ``LaTeX/tables`` directory.
@@ -301,7 +342,8 @@ def save_latex_table(
     """
     latex = make_latex_table(
         df, cols,
-        caption=caption, label=label, escape=escape, index=index, position=position,
+        caption=caption, label=label, escape=escape, index=index,
+        position=position, centering=centering, font_size=font_size,
     )
 
     path = _resolve_output_path(path, tables_root=tables_root)
