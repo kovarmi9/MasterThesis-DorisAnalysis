@@ -7,6 +7,7 @@ theme:
 
 plugins:
   - search
+  - include-markdown
 
 docs_dir: docs_src
 
