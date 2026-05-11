@@ -5,26 +5,37 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "doris-analysis"
 version = "0.1.0"
-description = "Python library for DORIS data analysis"
+description = "Python library for DORIS orbit and station time-series analysis"
+readme = "README.md"
 requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    {name = "Michal Kovář"},
+]
 
 dependencies = [
-    "requests",
-    "paramiko",
-    "unlzw3",
-    "pandas",
-    "numpy",
-    "tqdm",
-    "astropy",
-    "scipy",
-    "matplotlib",
+    "requests>=2.33",
+    "paramiko>=4.0",
+    "unlzw3>=0.2",
+    "pandas>=3.0",
+    "numpy>=2.4",
+    "tqdm>=4.67",
+    "astropy>=7.2",
+    "scipy>=1.17",
+    "statsmodels>=0.14",
+    "matplotlib>=3.10",
 ]
 
 [project.optional-dependencies]
-dev = [
-    "jupyter",
-    "ipykernel",
+notebooks = [
+    "jupyter>=1.1",
+    "ipykernel>=7.2",
 ]
+
+[project.urls]
+Homepage = "https://github.com/kovarmi9/MasterThesis-DorisAnalysis"
+Repository = "https://github.com/kovarmi9/MasterThesis-DorisAnalysis"
+Documentation = "https://kovarmi9.github.io/MasterThesis-DorisAnalysis/"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
