@@ -1,0 +1,16 @@
+site_name: doris-analysis
+site_description: Documentation for the master's thesis project MasterThesis-DorisAnalysis
+site_url: https://kovarmi9.github.io/MasterThesis-DorisAnalysis/
+
+theme:
+  name: material
+
+plugins:
+  - search
+  - include-markdown
+
+docs_dir: docs_src
+
+nav:
+  - Home: index.md
+  - Repository: https://github.com/kovarmi9/MasterThesis-DorisAnalysis

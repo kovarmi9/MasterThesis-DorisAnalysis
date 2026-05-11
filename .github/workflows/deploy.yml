@@ -1,0 +1,35 @@
+name: Deploy documentation
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "doc/**"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    name: Deploy MkDocs to GitHub Pages
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ./doc
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install documentation dependencies
+        run: pip install mkdocs mkdocs-material mkdocs-include-markdown-plugin
+
+      - name: Deploy documentation
+        run: mkdocs gh-deploy --force --clean --remote-branch gh-pages
