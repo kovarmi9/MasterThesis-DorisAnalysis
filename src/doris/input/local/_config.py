@@ -23,7 +23,4 @@ class LocalDecompressOptions:
     overwrite_decompressed: bool = True
 
     def __post_init__(self) -> None:
-        if not self.decompress and not self.keep_compressed:
-            raise ValueError(
-                "Invalid options: if decompress=False, keep_compressed should be True"
-            )
+        pass
