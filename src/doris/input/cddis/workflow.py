@@ -15,7 +15,7 @@ from ._config import (
     DownloadOptions,
     LoadConfig,
 )
-from doris._utils._decompress import decompress_file
+from doris._utils._decompress import DecompressionError, decompress_file
 
 log = logging.getLogger(__name__)
 
@@ -54,11 +54,16 @@ def run_cddis_workflow(
         for path in tqdm(downloaded_paths, desc="Decompressing", unit="file", disable=verbose):
             log.debug("Decompressing %s", path.name)
 
-            out_path = decompress_file(
-                path,
-                keep_compressed=cfg.decompress.keep_compressed,
-                overwrite=cfg.decompress.overwrite_decompressed,
-            )
+            try:
+                out_path = decompress_file(
+                    path,
+                    keep_compressed=cfg.decompress.keep_compressed,
+                    overwrite=cfg.decompress.overwrite_decompressed,
+                )
+            except DecompressionError as exc:
+                log.warning("Skipping decompression for %s: %s", path.name, exc)
+                out_path = path
+
             decompressed_paths.append(out_path)
 
         log.info("Workflow: decompression finished, %d files created.", len(decompressed_paths))

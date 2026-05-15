@@ -12,7 +12,8 @@ def select_periodogram_peaks(
     distance: int | None = None,
 ) -> pd.DataFrame:
     """Select the largest local peaks from a periodogram."""
-    df = periodogram.reset_index(drop=True)
+    # sort by period so find_peaks works correctly regardless of input order
+    df = periodogram.sort_values("period").reset_index(drop=True)
 
     # Find local maxima
     peaks, _ = find_peaks(df[value_col].to_numpy(), distance=distance)

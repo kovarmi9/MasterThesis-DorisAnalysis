@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -23,4 +24,9 @@ class LocalDecompressOptions:
     overwrite_decompressed: bool = True
 
     def __post_init__(self) -> None:
-        pass
+        if not self.decompress and not self.keep_compressed:
+            warnings.warn(
+                "decompress=False and keep_compressed=False: files will be copied as-is.",
+                UserWarning,
+                stacklevel=2,
+            )

@@ -116,10 +116,6 @@ class TrendResult:
     def intercept(self) -> float:
         return self.fit.intercept
 
-    @property
-    def wrss_value(self) -> float:
-        return self.wrss
-
     def summary(self) -> dict[str, float | int | str | bool | list[float]]:
         """Return scalar model metadata for tables or logs."""
         data: dict[str, float | int | str | bool | list[float]] = {

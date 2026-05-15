@@ -165,9 +165,6 @@ def load_orbit_day(
         mask = (df[time_col] >= t_start) & (df[time_col] < t_end)
         df = df[mask].reset_index(drop=True)
 
-        # keep attrs after filtering
-        df.attrs = df.attrs
-
     # store metadata
     attrs = dict(df.attrs)
     attrs["load_to_df"] = {

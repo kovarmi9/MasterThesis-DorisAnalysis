@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -47,6 +48,8 @@ class SshDecompressOptions:
 
     def __post_init__(self) -> None:
         if not self.decompress and not self.keep_compressed:
-            raise ValueError(
-                "Invalid options: if decompress=False, keep_compressed should usually be True"
+            warnings.warn(
+                "decompress=False and keep_compressed=False: files will be copied as-is.",
+                UserWarning,
+                stacklevel=2,
             )

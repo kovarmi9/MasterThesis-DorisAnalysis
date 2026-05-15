@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import calendar
 from datetime import datetime, timedelta
 
 import pandas as pd

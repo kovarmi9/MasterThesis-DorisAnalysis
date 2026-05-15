@@ -9,12 +9,15 @@ __all__ = [
 
 def orbit_diff_stats(diff_df: pd.DataFrame) -> dict[str, float]:
     """
-    Compute basic stats for R, T, N
+    Compute basic stats for R, T, N.
+    Works with both unit="m" (dR_m) and unit="mm" (dR_mm) output from compare_trajectories.
     """
+    # detect column suffix based on what is present
+    suffix = "_mm" if "dR_mm" in diff_df.columns else "_m"
 
-    dR = diff_df["dR_m"].to_numpy()
-    dT = diff_df["dT_m"].to_numpy()
-    dN = diff_df["dN_m"].to_numpy()
+    dR = diff_df[f"dR{suffix}"].to_numpy()
+    dT = diff_df[f"dT{suffix}"].to_numpy()
+    dN = diff_df[f"dN{suffix}"].to_numpy()
 
     def compute_stats(x):
         mean = float(np.mean(x))

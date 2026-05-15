@@ -57,9 +57,12 @@ def _sliding_window(
         if detected:
             jumps.append(0.5 * (c1 + c2))
 
+    # threshold: actual cutoff used — sigma-based for heuristic, alpha for t_test
+    threshold = heur_thr if threshold_mode == "heuristic" else alpha
+
     return {
         "jumps": np.array(jumps),
-        "threshold": heur_thr,
+        "threshold": threshold,
         "sigma": sigma,
         "mu1": np.array(mu1_list),
         "mu2": np.array(mu2_list),

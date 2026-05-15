@@ -52,6 +52,7 @@ def _detect_time_scale(df: pd.DataFrame, time_column: str) -> str:
         "Expected df.attrs['time_scale'] or time column name like 'MJD_TAI'."
     )
 
+
 def _detect_coordinate_system(df: pd.DataFrame) -> str:
     frame = str(df.attrs.get("coordinate_system", "")).upper().strip()
 
@@ -101,9 +102,6 @@ def transform_itrf_to_gcrs(df: pd.DataFrame) -> pd.DataFrame:
     input_frame = _detect_coordinate_system(df)
     time_column = _detect_time_column(df)
     time_scale = _detect_time_scale(df, time_column)
-
-    if time_column not in df.columns:
-        raise ValueError(f"Time column {time_column!r} not found in dataframe")
 
     out = df.copy()
 

@@ -38,7 +38,7 @@ def compute_periodogram(
     min_period, max_period
         Optional period range filter.
     n_frequencies
-        Number of tested frequencies for Lomb-Scargle.
+        Number of tested frequencies. Used only for Lomb-Scargle, ignored for FFT.
     """
     time, values, names = _coerce_periodogram_input(t, y, time_col=time_col, value_cols=value_cols)
     method_key = _normalize_method(method)
@@ -188,7 +188,7 @@ def _empty_periodogram_dict():
 
 
 def _fft_periodogram_1d(t, y):
-    """Compute an FFT periodogram for a single series using only numpy arrays."""
+    """One-sided FFT amplitude spectrum for a single series."""
     t, y = _clean_sort_series(t, y)
 
     if len(y) < 2:
@@ -204,12 +204,14 @@ def _fft_periodogram_1d(t, y):
     fft_values = np.fft.rfft(y)
     frequency = np.fft.rfftfreq(n, d=dt)
 
+    # scale to one-sided amplitude
     amplitude = np.abs(fft_values) / n
     if n % 2 == 0 and len(amplitude) > 2:
         amplitude[1:-1] *= 2.0
     elif len(amplitude) > 1:
         amplitude[1:] *= 2.0
 
+    # skip DC (frequency=0, period=inf)
     period = np.full_like(frequency, np.inf)
     period[1:] = 1.0 / frequency[1:]
 
@@ -231,7 +233,7 @@ def _lomb_scargle_periodogram_1d(
     max_period: float | None = None,
     n_frequencies: int = 6000,
 ):
-    """Compute a Lomb-Scargle periodogram for a single series using numpy arrays."""
+    """Lomb-Scargle periodogram for a single series (works on unevenly sampled data)."""
     t, y = _clean_sort_series(t, y)
 
     if len(y) < 3:

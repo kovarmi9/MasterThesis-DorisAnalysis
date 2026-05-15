@@ -1,4 +1,4 @@
-"""BIC pro lineární modely fitované MNČ."""
+"""BIC for linear models fitted by least squares."""
 
 from __future__ import annotations
 import numpy as np
@@ -9,9 +9,9 @@ def bic_from_rss(n: int, rss: float, k: int = 2) -> float:
 
     Parameters
     ----------
-    n   : počet datových bodů
-    rss : součet čtverců reziduálů (nevážený nebo vážený dle modelu)
-    k   : počet parametrů (výchozí 2 = sklon + úsek)
+    n   : number of data points
+    rss : residual sum of squares (unweighted or weighted depending on model)
+    k   : number of parameters (default 2 = slope + intercept)
     """
     if n <= k or not np.isfinite(rss):
         return np.inf

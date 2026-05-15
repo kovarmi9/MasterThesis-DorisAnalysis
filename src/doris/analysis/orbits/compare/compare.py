@@ -63,7 +63,9 @@ def compare_trajectories(
     scale = 1000.0 if unit == "mm" else 1.0
     suffix = "_mm" if unit == "mm" else "_m"
 
-    # Trim reference to stay inside source interval
+    # Trim reference to stay inside source interval.
+    # t_a[edge_trim] skips first edge_trim points from source,
+    # t_a[-edge_trim] skips last edge_trim-1 points (slightly asymmetric by design).
     t_a = df_a[time_col].values
     t_min = t_a[edge_trim] if edge_trim > 0 else t_a[0]
     t_max = t_a[-edge_trim] if edge_trim > 0 else t_a[-1]

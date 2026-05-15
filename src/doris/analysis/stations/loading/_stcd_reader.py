@@ -90,12 +90,6 @@ def read_stcd_to_dataframe(path: Path | str) -> pd.DataFrame:
     if df.empty:
         raise ValueError(f"No data rows parsed from STCD file: {path}")
 
-    if len(df.columns) != len(_STCD_COLUMNS):
-        raise ValueError(
-            f"Expected {len(_STCD_COLUMNS)} columns, "
-            f"got {len(df.columns)} in {path}"
-        )
-
     # Convert all columns to numeric, coercing any stray text to NaN
     for col in df.columns:
         df[col] = pd.to_numeric(df[col], errors="coerce")

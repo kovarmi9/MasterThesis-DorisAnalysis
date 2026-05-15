@@ -296,15 +296,6 @@ def hermite_at_time(
 
     t, r, v = _coerce_inputs(data)
 
-    t = np.asarray(t, dtype=float).reshape(-1)
-    r = np.asarray(r, dtype=float)
-    v = np.asarray(v, dtype=float)
-
-    if r.ndim == 2 and r.shape == (3, t.size):
-        r = r.T
-    if v.ndim == 2 and v.shape == (3, t.size):
-        v = v.T
-
     if r.shape != (t.size, 3) or v.shape != (t.size, 3):
         raise ValueError("After coercion, shapes must be t(N,), r(N,3), v(N,3).")
 

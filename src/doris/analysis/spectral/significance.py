@@ -36,10 +36,19 @@ def estimate_periodogram_threshold(
         raise ValueError("n_permutations must be at least 1")
 
     time, values = _coerce_threshold_input(t, y, time_col=time_col, value_cols=value_cols)
-    rng = np.random.default_rng(random_state)
-    maxima = []
 
-    for _ in range(n_permutations):
+    # validate value_col once before running permutations
+    test_pgram = compute_periodogram(
+        time, values, method=method,
+        min_period=min_period, max_period=max_period, n_frequencies=n_frequencies,
+    )
+    if value_col not in test_pgram:
+        raise KeyError(f"Periodogram does not contain column {value_col!r}")
+
+    rng = np.random.default_rng(random_state)
+    maxima = [test_pgram[value_col].max()]
+
+    for _ in range(n_permutations - 1):
         shuffled = values.copy()
         for col in range(shuffled.shape[1]):
             shuffled[:, col] = rng.permutation(shuffled[:, col])
@@ -52,9 +61,6 @@ def estimate_periodogram_threshold(
             max_period=max_period,
             n_frequencies=n_frequencies,
         )
-
-        if value_col not in periodogram:
-            raise KeyError(f"Periodogram does not contain column {value_col!r}")
 
         maxima.append(periodogram[value_col].max())
 
@@ -131,6 +137,7 @@ def _find_significant_peaks_1d(periodogram, *, threshold, value_col, n_peaks):
     peaks = df.iloc[peak_idx].copy()
     peaks = peaks[peaks[value_col] >= threshold]
 
+    # assumes period is in decimal years
     if "period_days" not in peaks.columns and "period" in peaks.columns:
         peaks["period_days"] = peaks["period"] * 365.25
 
