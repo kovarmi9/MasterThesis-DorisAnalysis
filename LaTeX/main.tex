@@ -1,20 +1,19 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%													                                                                         %%
-%% 	                                      DIPLOMOVÁ PRÁCE                                            %%
-%% 				                                  Michal Kovář			                                       %%
-%%													                                                                         %%
+%%                                                                                                   %%
+%%                                          DIPLOMOVÁ PRÁCE                                          %%
+%%                                           Michal Kovář                                            %%
+%%                                                                                                   %%
 %% pro formátování využita šablona: http://geo3.fsv.cvut.cz/kurzy/mod/resource/view.php?id=775       %%
 %%                                  https://people.fsv.cvut.cz/~soukup/dip/horcickova/horcickova.pdf %%
-%%													                                                                         %%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
-
+%%                                                                                                   %%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \documentclass[
   12pt,         			% Velikost základního písma je 12 bodů
   a4paper,      			% Formát papíru je A4
   oneside,       			% Oboustranný tisk
-  pdftex,				      % Překlad bude proveden programem 'pdftex' do PDF
-% twoside             % Zarovnaní stran pro oboustranný tisk
-]{report}       		  % Dokument třídy 'zpráva'
+  pdftex,				    % Překlad bude proveden programem 'pdftex' do PDF
+% twoside                   % Zarovnaní stran pro oboustranný tisk
+]{report}       		    % Dokument třídy 'zpráva'
 
 \newcommand{\Fbox}[1]{\fbox{\strut#1}}
 
@@ -75,9 +74,9 @@
 \def\ALG@name{Pseudokód}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%													                                                                         %%
+%%                                                                                                   %%
 %%                                   úpravy šablony - Michal Kovář                                   %%
-%%													                                                                         %%
+%%                                                                                                   %%
 %%                     Tip: pro zalomování text v *.tex ve vscode zkratka ALT + Z                    %%
 
 \overfullrule=5pt
@@ -95,16 +94,37 @@
 \usepackage{eurosym}% pro symbol eura
 \usepackage{ragged2e}% pro vyrovnání do bloku příkazem \justifying
 \usepackage{listings}%pro psaní kodu
-\usepackage[none]{hyphenat}% na radu od Filipa pro nazalomování slov
+\usepackage{hyphenat}% na radu od Filipa pro nazalomování slov
+
+\usepackage{multirow}
+\usepackage{tabularx}
+
+\usetikzlibrary{positioning}
 
 \usepackage{lmodern} %pro hezčí font na mikTeXu
 
 \usepackage{xparse}% pro volitelné argumenty
 
-%zalamování url v bib
-\usepackage{xurl}   % nejlepší zalamování URL
-\usepackage{hyperref}
+\usepackage{minted}%barevná syntaxe kodu
+\usepackage{listings}
+\usepackage{xcolor}
+\lstdefinestyle{python}{
+    language=Python,
+    basicstyle=\small\ttfamily,
+    keywordstyle=\color{blue}\bfseries,
+    stringstyle=\color{orange},
+    commentstyle=\color{gray}\itshape,
+    frame=lines,
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    showstringspaces=false,
+}
 
+%zalamování url v bib
+\usepackage{hyperref}
+\usepackage{xurl}   % nejlepší zalamování URL
+
+\usepackage{booktabs}
 
 % Definice vlastního příkazu \tg a \cotg
 \newcommand{\tg}{\mathrm{tg}}                                                                        %%
@@ -136,7 +156,7 @@
 {sdgfdg}%Analýza výsledků zpracování metody DORIS (Doppler Orbitography and Radiopositioning Integrated by Satellite)
 
 % Jméno a příjmení autora
-\autor{Michal}{Kovář}
+\autor{Bc.~Michal}{Kovář}
 
 % %% Jméno a příjmení vedoucího práce včetně titulů
 \garant{doc.~Ing.~Jakub~Kostelecký,~Ph.D. a Ing.~Petr~Štěpánek,~Ph.D.}
@@ -158,16 +178,15 @@
 
 %% Místo obhajoby
 \misto{Praha}
-
 %% Abstrakt
 \abstrakt
-{Tato diplomová práce se zaměřuje na analýzu výsledků zpracování metody DORIS (Doppler Orbitography and Radiopositioning Integrated by Satellite), s~důrazem na výstupy analytického centra DORIS na Geodetické observatoři Pecný. První část práce se zaměřuje na analýzu časových řad souřadnic stanic systému DORIS a na určení skoků, periodických složek a dlouhodobých trendů. Druhá část práce se zaměřuje na analýzu přesných drah družic vybavených přijímačem systému DORIS. Pro porovnání drah jsou použity dva přístupy – dynamická parametrizace dráhy v~softwaru Bernese GNSS a matematické metody interpolace souřadnic v~dané epoše.}
-{This master’s thesis focuses on the analysis of the results of DORIS (Doppler Orbitography and Radiopositioning Integrated by Satellite) processing, with emphasis on the outputs of the DORIS Analysis Center at the Geodetic Observatory Pecný. The first part of the thesis focuses on the analysis of time series of DORIS station coordinates and on the identification of jumps, periodic components, and long‑term trends. The second part of the thesis focuses on the analysis of precise orbits of satellites equipped with DORIS receivers. For orbit comparison, two approaches are used – dynamic orbit parameterization in the Bernese GNSS software and mathematical methods of coordinate interpolation at a given epoch.}
+{Tato diplomová práce se zabývá analýzou výsledků zpracování metody DORIS (Doppler Orbitography and Radiopositioning Integrated by Satellite), s~důrazem na výstupy analytického centra systému DORIS na Geodetické observatoři Pecný. První část práce se zaměřuje na analýzu časových řad souřadnic stanic systému DORIS a na určení dlouhodobých trendů, diskontinuit a periodických složek. Druhá část práce se zaměřuje na analýzu přesných drah družic vybavených přijímačem systému DORIS. Pro porovnání drah jsou využity dva přístupy – dynamická parametrizace dráhy v~Bernese GNSS Software a Hermitova interpolace souřadnic v~daných epochách.}
+{This master’s thesis deals with the analysis of the results of DORIS (Doppler Orbitography and Radiopositioning Integrated by Satellite) processing, with emphasis on the outputs of the DORIS Analysis Center at the Geodetic Observatory Pecný. The first part of the thesis focuses on the analysis of time series of DORIS station coordinates and on the identification of long-term trends, discontinuities, and periodic components. The second part of the thesis focuses on the analysis of precise orbits of satellites equipped with DORIS receivers. For orbit comparison, two approaches are used – dynamic orbit parameterization in the Bernese GNSS Software and Hermite interpolation of coordinates at given epochs.}
 
 %% Klíčová slova
 \klicovaslova
-{DORIS, IDS, časové řady, souřadnice stanic, přesné dráhy družic, detekce diskontinuit, trendová analýza, spektrální analýza, Bernese GNSS software, interpolace drah}
-{DORIS, IDS, time series, station coordinates, precise satellite orbits, discontinuity detection, trend analysis, spectral analysis, Bernese GNSS software, orbit interpolation}
+{DORIS, IDS, časové řady, souřadnice stanic, přesné dráhy družic, detekce diskontinuit, trendová analýza, spektrální analýza, Bernese GNSS Software, interpolace drah}
+{DORIS, IDS, time series, station coordinates, precise satellite orbits, discontinuity detection, trend analysis, spectral analysis, Bernese GNSS Software, orbit interpolation}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -179,6 +198,7 @@
 
 %% Začátek dokumentu
 \begin{document}
+\selectlanguage{czech}
 
 \catcode`\-=12  % pro vypnuti aktivniho znaku '-' pouzivaneho napr. v \cline 
 
@@ -210,7 +230,10 @@
 \vytvorabstrakt
 
 % Vysázení prohlaseni o samostatnosti
-\vytvorprohlaseni
+% \vytvorprohlaseni
+\stranka{}%
+    {\includepdf[pages=1, offset=15mm -10mm]{./images/zadani/prohlaseni.pdf}
+    }
 
 % Vysázení poděkování
 \stranka{%nahore
@@ -224,8 +247,7 @@
 	\vspace{1em}
 		%\noindent
 	\par\hspace{2ex}
-	%{Chtěl bych poděkovat svým vedoucím doc.~Ing.~Jakubu~Kosteleckému,~Ph.D. a Ing.~Petru~Štěpánkovi,~Ph.D. za jejich ochotu a velké množství cenných rad při vedení této diplomové práce. Dále bych chtěl poděkovat Ing.~Vratislavu~Fillerovi,~Ph.D. za odborné konzultace a rady ohledně softwaru Bernese. Velké poděkování patří také mé rodině za podporu během celého studia.}
-  {Chtěl bych poděkovat svým vedoucím doc.~Ing.~Jakubu~Kosteleckému,~Ph.D., a Ing.~Petru~Štěpánkovi,~Ph.D., za jejich ochotu a množství cenných rad při vedení této diplomové práce. Dále bych chtěl poděkovat Ing.~Vratislavu~Fillerovi,~Ph.D., za odborné konzultace a rady ohledně softwaru Bernese. Velké poděkování patří také mé rodině za podporu během celého studia.}
+  {Chtěl bych poděkovat svým vedoucím doc.~Ing.~Jakubu~Kosteleckému,~Ph.D., a Ing.~Petru~Štěpánkovi,~Ph.D., za jejich ochotu a množství cenných rad při vedení této diplomové práce. Velké poděkování patří také mé rodině za podporu během celého studia.}
 }
 
 % Vysázení obsahu
@@ -239,6 +261,13 @@
 
 % jednotlivé kapitoly
 \include{tex/1-uvod}
+% \include{tex/2-reserse}
+% \include{tex/3-teorie-casove-rady}
+% \include{tex/4-teorie-drahy-druzic}
+% \include{tex/5-implementace}
+% \include{tex/6-testovani}
+% \include{tex/7-vysledky}
+% \include{tex/8-zaver}
 
 % Vysázení seznamu zkratek
 \include{zkratky}
@@ -248,11 +277,6 @@
 \def\refname{Literatura}
 \bibliographystyle{mystyle}
 \bibliography{literatura}
-
-
-% Začátek příloh
-\def\figurename{Figure}%
-%\prilohy
 
 % Vysázení seznamu příloh
 \seznampriloh
