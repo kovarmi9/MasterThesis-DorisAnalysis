@@ -214,7 +214,6 @@ LaTeX/build/
 *.out
 *.loa
 *.lof
-*.log
 *.lot
 *.fls
 *.fdb_latexmk
@@ -224,3 +223,11 @@ LaTeX/build/
 
 # LaTeX local pdf not commited
 Thesis.pdf
+
+# Private data
+**/token.txt
+**/login.txt
+**/login_ssh.txt
+
+# Data files
+data/
