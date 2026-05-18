@@ -1,0 +1,67 @@
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% %%                                    PŘÍLOHY                                    %%
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\appendix
+% Příloha A: GitHub repozitář
+\chapter*{A GitHub repozitář}
+\addcontentsline{loa}{section}{A GitHub repozitář}
+\href{https://github.com/kovarmi9/MasterThesis-DorisAnalysis}{\texttt{https://github.com/kovarmi9/MasterThesis-DorisAnalysis}}.
+\begin{center}
+\qrcode[height=4cm]{https://github.com/kovarmi9/MasterThesis-DorisAnalysis}
+\end{center}
+\textbf{Struktura repozitáře:}
+\dirtree{%
+.1 \href{https://github.com/kovarmi9/MasterThesis-DorisAnalysis}{\texttt{MasterThesis-DorisAnalysis}}.
+.2 \href{https://github.com/kovarmi9/MasterThesis-DorisAnalysis/blob/main/README.md}{\texttt{README.md}}.\dottedline základní informace o~projektu.
+.2 \href{https://github.com/kovarmi9/MasterThesis-DorisAnalysis/blob/main/LICENSE}{\texttt{LICENSE}}.\dottedline licenční podmínky projektu.
+.2 \href{https://github.com/kovarmi9/MasterThesis-DorisAnalysis/blob/main/Thesis.pdf}{\texttt{Thesis.pdf}}.\dottedline finální text diplomové práce ve formátu PDF.
+.2 \href{https://github.com/kovarmi9/MasterThesis-DorisAnalysis/blob/main/pyproject.toml}{\texttt{pyproject.toml}}.\dottedline konfigurace Python balíčku \texttt{doris-analysis}.
+.2 \href{https://github.com/kovarmi9/MasterThesis-DorisAnalysis/blob/main/requirements.txt}{\texttt{requirements.txt}}.\dottedline závislosti pro spuštění notebooků.
+.2 \href{https://github.com/kovarmi9/MasterThesis-DorisAnalysis/tree/main/src}{\texttt{src}}.
+.3 \href{https://github.com/kovarmi9/MasterThesis-DorisAnalysis/tree/main/src/doris}{\texttt{doris}}.\dottedline hlavní Python balíček.
+.4 \href{https://github.com/kovarmi9/MasterThesis-DorisAnalysis/tree/main/src/doris/_utils}{\texttt{\_utils}}.\dottedline sdílené pomocné funkce.
+.4 \href{https://github.com/kovarmi9/MasterThesis-DorisAnalysis/tree/main/src/doris/input}{\texttt{input}}.\dottedline načítání vstupních dat.
+.4 \href{https://github.com/kovarmi9/MasterThesis-DorisAnalysis/tree/main/src/doris/analysis}{\texttt{analysis}}.\dottedline výpočetní a analytické moduly.
+.5 \href{https://github.com/kovarmi9/MasterThesis-DorisAnalysis/tree/main/src/doris/analysis/stations}{\texttt{stations}}.\dottedline analýza časových řad stanic.
+.5 \href{https://github.com/kovarmi9/MasterThesis-DorisAnalysis/tree/main/src/doris/analysis/spectral}{\texttt{spectral}}.\dottedline spektrální analýza.
+.5 \href{https://github.com/kovarmi9/MasterThesis-DorisAnalysis/tree/main/src/doris/analysis/orbits}{\texttt{orbits}}.\dottedline analýza drah družic.
+.4 \href{https://github.com/kovarmi9/MasterThesis-DorisAnalysis/tree/main/src/doris/output}{\texttt{output}}.\dottedline export grafů a tabulek.
+.2 \href{https://github.com/kovarmi9/MasterThesis-DorisAnalysis/tree/main/notebooks}{\texttt{notebooks}}.
+.3 \href{https://github.com/kovarmi9/MasterThesis-DorisAnalysis/tree/main/notebooks/stations}{\texttt{stations}}.\dottedline analýza souřadnic stanic.
+.3 \href{https://github.com/kovarmi9/MasterThesis-DorisAnalysis/tree/main/notebooks/satellites}{\texttt{satellites}}.\dottedline analýza drah družic.
+.3 \href{https://github.com/kovarmi9/MasterThesis-DorisAnalysis/tree/main/notebooks/tests}{\texttt{tests}}.\dottedline testovací notebooky.
+.2 \href{https://github.com/kovarmi9/MasterThesis-DorisAnalysis/tree/main/reports}{\texttt{reports}}.
+.3 \href{https://github.com/kovarmi9/MasterThesis-DorisAnalysis/blob/main/reports/report_stations.pdf}{\texttt{report\_stations.pdf}}.\dottedline report analýzy časových řad stanic.
+.3 \href{https://github.com/kovarmi9/MasterThesis-DorisAnalysis/blob/main/reports/report_satellites.pdf}{\texttt{report\_satellites.pdf}}.\dottedline report porovnání drah družic.
+.2 \href{https://github.com/kovarmi9/MasterThesis-DorisAnalysis/tree/main/LaTeX}{\texttt{LaTeX}}.\dottedline zdrojový text práce.
+.2 \href{https://github.com/kovarmi9/MasterThesis-DorisAnalysis/tree/main/doc}{\texttt{doc}}.\dottedline dokumentace knihovny.
+}
+
+% Příloha B: Elektronická příloha - SD karta
+\newpage
+\chapter*{B Elektronická příloha -- SD karta}
+\addcontentsline{loa}{section}{B Elektronická příloha - SD karta}
+\textbf{Struktura elektronické přílohy:}
+\dirtree{%
+.1 SD.
+.2 README.md.\dottedline základní informace o~obsahu elektronické přílohy.
+.2 pyproject.toml.\dottedline konfigurace Python balíčku \texttt{doris-analysis}.
+.2 requirements.txt.\dottedline seznam použitých závislostí.
+.2 src.
+.3 doris.\dottedline hlavní Python balíček.
+.4 \_utils.\dottedline sdílené pomocné funkce.
+.4 input.\dottedline načítání vstupních dat.
+.4 analysis.\dottedline výpočetní a analytické moduly.
+.5 stations.\dottedline analýza časových řad stanic.
+.5 spectral.\dottedline spektrální analýza.
+.5 orbits.\dottedline analýza drah družic.
+.4 output.\dottedline export grafů a tabulek.
+.2 notebooks.
+.3 stations.\dottedline notebooky pro analýzu stanic.
+.3 satellites.\dottedline notebooky pro analýzu drah družic.
+.3 tests.\dottedline testovací notebooky.
+.2 reports.
+.3 report\_stations.pdf.\dottedline report analýzy časových řad stanic.
+.3 report\_satellites.pdf.\dottedline report porovnání drah družic.
+}
