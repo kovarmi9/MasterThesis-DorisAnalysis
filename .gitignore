@@ -206,6 +206,24 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
+# LaTeX build output
+LaTeX/build/
+*.aux
+*.log
+*.toc
+*.out
+*.loa
+*.lof
+*.lot
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.bbl
+*.blg
+
+# LaTeX local pdf not commited
+Thesis.pdf
+
 # Private data
 **/token.txt
 **/login.txt
