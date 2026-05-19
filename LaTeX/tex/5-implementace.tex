@@ -1,0 +1,242 @@
+\chapter{Implementace}
+\label{5-implementace}
+
+Pro účely této práce se nepodařilo dohledat žádný komplexní nástroj, který by umožňoval ucelenou analýzu dat systému \zkratka{DORIS}. Existuje řada nástrojů zaměřených na dílčí úlohy, jako je například načítání dat z~archivu CDDIS NASA, přístup k~SSH serverům, analýza trendu, spektrální analýza, detekce skoků nebo práce s~drahami družic, ty však nejsou vzájemně propojeny do jednoho uceleného prostředí. Z~tohoto důvodu byla v~rámci této práce vytvořena vlastní knihovna \texttt{doris-analysis}, implementovaná v~programovacím jazyce Python. Ta využívá existující knihovny pro práci se soubory, síťovou komunikaci a numerické výpočty a zároveň obsahuje nově implementované algoritmy.
+
+Pro porovnání drah družic lze kromě této knihovny, v~níž je porovnání drah založeno na matematické interpolaci, využít také \zkratka{BSW}, v~němž lze provést porovnání drah na základě jejich dynamické parametrizace. Nevýhodou \zkratka{BSW} je vysoká pořizovací cena, komplikovaná obsluha a nutnost modelování fyzikálních vlivů. V~této práci proto \zkratka{BSW} slouží především pro kontrolu výsledků knihovny v~Pythonu, jejíž výhodou je využití matematické interpolace, díky níž není potřeba modelovat fyzikální vlivy. Výpočet pomocí knihovny je tak méně náročný a díky tomu i rychlejší. Knihovna je navíc volně dostupná na platformě GitHub pod licencí MIT.
+
+Veškeré výstupy analýzy byly vytvářeny v~prostředí Jupyter Notebook s~využitím vyvinuté knihovny \texttt{doris-analysis}. Výstupy \zkratka{BSW} byly do tohoto prostředí rovněž načteny, porovnány 
+s~výsledky knihovny a vizualizovány. Díky tomu je vzhled všech výstupů jednotný.
+
+\section{Struktura knihovny}
+
+Knihovna \texttt{doris-analysis} je navržena jako modulární Python balíček \texttt{doris}. Její struktura vychází z~rozdělení celého zpracování do tří hlavních částí: načítání dat, analýzy dat a exportu výsledků, které jsou dále členěny do specializovaných modulů. Toto členění umožňuje jednotlivé kroky využívat samostatně nebo je kombinovat do uceleného výpočetního řetězce.
+
+\begin{table}[H]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\caption{Struktura knihovny.}
+\label{tab:doris-structure}
+
+\begin{tabular}{p{0.49\textwidth} p{0.44\textwidth}}
+\hline
+\textbf{Modul} & \textbf{Účel} \\
+\hline
+
+\multicolumn{2}{l}{\textbf{Stahování dat (\texttt{doris.input})}} \\
+\texttt{doris.input.cddis}                         & Stahování dat z~archivu CDDIS. \\
+\texttt{doris.input.ssh}                           & Stahování dat ze vzdálených serverů SSH. \\
+\texttt{doris.input.local}                         & Stahování dat z~lokálního úložiště. \\
+
+\hline
+\multicolumn{2}{l}{\textbf{Analýza dat (\texttt{doris.analysis})}} \\
+\texttt{doris.analysis.stations.loading}           & Načítání dat stanic ze souborů formátu STCD. \\
+\texttt{doris.analysis.stations.trend}             & Odhad lineárního trendu \\
+\texttt{doris.analysis.stations.discontinuities}   & Detekce diskontinuit v~časových řadách. \\
+\texttt{doris.analysis.spectral}                   & Spektrální analýza (FFT, Lomb-Scargle). \\
+\texttt{doris.analysis.orbits.loading}             & Načítání orbitálních dat ve formátu SP3. \\
+\texttt{doris.analysis.orbits.interpolate}         & Hermitova interpolace drah. \\
+\texttt{doris.analysis.orbits.compare}             & Porovnání trajektorií satelitů. \\
+\texttt{doris.analysis.orbits.transform}           & Transformace souřadnic (ITRF\,→\,GCRS). \\
+\texttt{doris.analysis.orbits.track}               & Výpočet RTN složek trajektorie. \\
+
+\hline
+\multicolumn{2}{l}{\textbf{Výstupy (\texttt{doris.output})}} \\
+\texttt{doris.output.plots}                        & Tvorba grafů a vizualizací. \\
+\texttt{doris.output.tables}                       & Export výsledků do tabulkových formátů. \\
+
+\hline
+\end{tabular}
+\end{table}
+
+\paragraph{Instalace knihovny}\leavevmode\\
+Knihovna je dostupná ve formě Python projektu využívajícího konfigurační soubor \texttt{pyproject.toml}. Instalace probíhá z~kořenového adresáře projektu, který obsahuje tento soubor a složku \texttt{src} se zdrojovými kódy. Pro instalaci je potřeba spustit příkaz: \texttt{pip install -e .}
+
+
+\paragraph{Ukázka použití}
+\begin{verbatim}
+from doris.analysis.stations.loading import load_station_dataframe
+from doris.analysis.stations.trend import fit_linear_trend
+
+df = load_station_dataframe("file.stcd")
+result = fit_linear_trend(df["year"], df["value"], sigma=df["sigma"])
+
+print(f"Sklon:          {result.slope:.2f} mm/rok")
+print(f"Absolutni clen: {result.intercept:.2f} mm")
+print(f"R2:             {result.r2:.4f}")
+\end{verbatim}
+
+\section{Získání vstupních dat}
+
+Vytvořená knihovna umožňuje získávat vstupní data ze tří různých zdrojů, a to z~archivu CDDIS prostřednictvím protokolu HTTPS, ze vzdálených SSH serverů pomocí protokolu SFTP a z~lokálního úložiště, například pevného disku. Při načítání dat je možné specifikovat požadovaný výběr souborů, přičemž filtrování probíhá na základě názvů souborů a adresářové struktury. Při výběru lze zohlednit například časové období, použité řešení, konkrétní družici nebo stanici. Součástí procesu získání dat je také volitelná dekomprese souborů ve formátech \texttt{.Z} nebo \texttt{.gz}, což umožňuje jejich přímé využití v~následných krocích zpracování.
+
+\paragraph{Stažení dat z~archivu CDDIS}\leavevmode\\
+Stahování dat z~archivu CDDIS probíhá prostřednictvím protokolu HTTPS. Uživatel se musí přihlásit na službu NASA Earthdata pomocí tokenu nebo uživatelského jména a hesla. Na základě zadaných parametrů je sestavena adresa datasetu, ze které je stažen indexový soubor \texttt{MD5SUMS} obsahující seznam dostupných souborů. Podle obsahu souboru \texttt{MD5SUMS} jsou následně stahovány jednotlivé soubory. V~případě neúspěšného stažení je pokus automaticky opakován třikrát a pokud se ani poté nepodaří soubor stáhnout, je přeskočen.
+
+\paragraph{Stažení dat ze vzdálených serverů (SSH)}\leavevmode\\
+Pro stahování dat ze vzdálených serverů prostřednictvím SSH je využíván přenos souborů pomocí protokolu SFTP. K~tomu slouží knihovna \texttt{paramiko}. Soubory jsou ve zvoleném adresáři filtrovány podle zadaných kritérií a následně stahovány do lokálního úložiště.
+
+\paragraph{Načtení dat z~lokálního úložiště}\leavevmode\\
+Při práci s~lokálními daty jsou soubory vybírány na základě stejného mechanismu filtrování jako u~ostatních zdrojů, tedy podle názvů souborů a adresářové struktury, a mohou být následně kopírovány do pracovního adresáře. To umožňuje jednotné zpracování dat bez ohledu na jejich původ.
+
+\paragraph{Dekomprese dat}\leavevmode\\
+Data jsou často dostupná v~komprimované podobě, proto knihovna obsahuje modul pro jejich hromadnou dekompresi využívající knihovny \texttt{gzip} a \texttt{unlzw3}. Dekomprese může probíhat automaticky po stažení nebo kopírování souborů, přičemž je možné volit, zda mají být původní komprimované soubory zachovány nebo odstraněny.
+
+\paragraph{Filtrace dat}\leavevmode\\
+Soubory jsou vybírány na základě jejich umístění v~adresářové struktuře a podle názvu souboru. Lze tak zohlednit například časové období, použité řešení, konkrétní družici nebo stanici. Vybrané soubory jsou ukládány do přehledné adresářové struktury, která usnadňuje jejich následné zpracování.
+
+\section{Analýza časových řad souřadnic stanic}
+
+\begin{sloppypar}
+Pro analýzu časových řad souřadnic stanic systému \zkratka{DORIS} byl v~rámci knihovny \texttt{doris-analysis} vytvořen modul \texttt{doris.analysis.stations}, který umožňuje načíst data ze souboru ve formátu STCD do tabulkové datové struktury \texttt{DataFrame} knihovny Pandas. Dále umožňuje odhad lineárního trendu a detekci diskontinuit. Spektrální analýza je sdílena s~analýzou drah v~samostatném modulu \texttt{doris.analysis.spectral}.
+\end{sloppypar}
+
+\subsection{Načtení a příprava časových řad}
+
+Zdrojová data jsou poskytována ve formátu \texttt{STCD} -- textovém souboru s~proměnlivě dlouhou hlavičkou a datovým blokem se třinácti sloupci (\texttt{MJD}, \texttt{dX}, \texttt{dY}, \texttt{dZ}, \texttt{sX}, \texttt{sY}, \texttt{sZ}, \texttt{dE}, \texttt{dN}, \texttt{dU}, \texttt{sE}, \texttt{sN}, \texttt{sU}). Načítání zajišťuje funkce \texttt{load\_station\_dataframe(path)} z~modulu \texttt{doris.analysis.stations.loading}, která vnitřně provádí čtyři kroky.
+
+\begin{enumerate}
+    \item \textbf{Parsování souboru} -- automatické nalezení začátku datového bloku a načtení hodnot do struktury \texttt{DataFrame}. Kartézské složky \texttt{dX}, \texttt{dY}, \texttt{dZ} a jejich směrodatné odchylky jsou ve výchozím nastavení vynechány, protože pro analýzu jsou využívány složky lokálního systému \texttt{dE}, \texttt{dN} a~\texttt{dU}.
+
+    \item \textbf{Převod časové osy} -- epochy MJD jsou převedeny na kalendářní datum (\texttt{Date}) a dekadický rok (\texttt{year}).
+
+    \item \textbf{Regularizace vzorkování} -- pomocná funkce \texttt{infer\_mjd\_step} detekuje dominantní vzorkovací interval jako nejčastější rozdíl sousedních epoch. Chybějící epochy jsou doplněny jako řádky hodnot \texttt{NaN}, takže výsledná řada má pravidelný krok.
+
+    \item \textbf{Oříznutí časového okna} -- volitelné parametry \texttt{start} a~\texttt{end} omezí řadu na zadaný časový úsek. Vstup je požadován ve formátu \texttt{"RRRR-MM-DD"}.
+\end{enumerate}
+
+Výsledkem je \texttt{DataFrame} s~devíti sloupci (\texttt{MJD}, \texttt{Date}, \texttt{year}, \texttt{dE}, \texttt{dN}, \texttt{dU}, \texttt{sE}, \texttt{sN}, \texttt{sU}) doplněný o~informace o~zdroji a jednotkách dat v~atributu \texttt{df.attrs}.
+
+\subsection{Odhad trendu}
+Odhad trendu je realizován funkcemi \texttt{fit\_linear\_trend} a~\texttt{fit\_piecewise\_trend} z~modulu \texttt{doris.analysis.stations.trend}. 
+
+Funkce \texttt{fit\_linear\_trend} implementuje jednoduchý lineární model. Je-li funkci předán také sloupec nejistot $\sigma_i$, použije se vážené vyrovnání MNČ s~vahami \(p_i = 1/\sigma_i^2\), jinak je použito nevážené vyrovnání MNČ.
+
+Funkce \texttt{fit\_piecewise\_trend} implementuje model s~diskontinuitami a~změnou sklonu dle rovnice~(\ref{eq:2seg_model}).  Polohy lomů jsou hledány hladovým algoritmem: v~každém kroku je prohledán prostor kandidátních lomů $\tau \in \mathcal{T}$ a vybrán ten, který minimalizuje
+$RSS(\tau)$.  Přidání dalšího lomu je podmíněno poklesem hodnoty \zkratka{BIC}. Parametr \texttt{max\_segments} omezuje maximální počet segmentů; hodnotou \texttt{None} jsou lomy přidávány tak dlouho, dokud \zkratka{BIC} klesá. Po ukončení hladového přidávání proběhne zpětné prořezávání -- každý lom je odebrán a ponechán pouze tehdy, pokud jeho přítomnost snižuje \zkratka{BIC}.  Minimální počet pozorování na každé straně lomu (\texttt{min\_points}~$=10$) a minimální vzdálenost lomu od krajů segmentu (\texttt{min\_years}~$=1$) zamezují degenerovaným řešením.
+
+Výsledek obou funkcí je objekt \texttt{TrendResult} obsahující odhadnuté
+parametry všech segmentů, polohy lomů, hodnotu \zkratka{BIC}, vyrovnané
+hodnoty, rezidua a koeficient determinace~$R^2$.
+
+\subsection{Detekce diskontinuit}
+Detekce diskontinuit je v~modulu \texttt{doris.analysis.stations.discontinuities} implementována pomocí dvou metod. Obě funkce vracejí objekt \texttt{JumpDetectionResult} obsahující pole detekovaných epoch \texttt{jumps}, použitou metodou, hodnotou prahu a slovníkem \texttt{extras} s~mezivýsledky pro vizualizaci.
+
+\paragraph{Metoda dvou pohyblivých oken}
+Funkce \texttt{detect\_jumps\_sliding\_window} porovnává průměry $\mu_1$ a $\mu_2$ ve dvou sousedních oknech délky $W$ posunutých o~$s$ vzorků. Skok je detekován při překročení detekčního prahu $\lambda$. Jsou podporovány dva režimy:
+
+\begin{itemize}
+    \item \texttt{"heuristic"} -- 
+    $\lambda = k~\cdot \sigma$, kde $\sigma$ je směrodatná odchylka časové řady a $k$ je uživatelsky zvolený násobek (\texttt{sigma\_mult}),
+    
+    \item \texttt{"t\_test"} -- 
+    Welchův dvouvýběrový t-test rovnosti středních hodnot obou oken. Skok je detekován při $p < \alpha$.
+\end{itemize}
+
+\paragraph{Vyhlazení a analýza derivace}
+Funkce \texttt{detect\_jumps\_lowess} vyhlazuje řadu metodou LOWESS s~parametrem \texttt{frac} a aproximuje derivaci konečnými diferencemi dle vztahu~(\ref{eq:derivative}). Práh \(\lambda\) je stanoven jedním ze dvou způsobů:
+\begin{itemize}
+    \item \texttt{"heuristic"} --
+    $\lambda = \max\!\left(\lambda_{\min},\; k~\cdot \hat{\sigma}_{\mathrm{v}}\right)$,
+    kde parametr $k$ určuje citlivost detekce, $\hat{\sigma}_v$ je směrodatná odchylka hodnot derivace a $\lambda_{\min}$ je minimální povolený práh,
+
+    \item \texttt{"z\_test"} --
+    z-test hodnot derivace. Skok je detekován při $p < \alpha$.
+\end{itemize}
+
+\subsection{Spektrální analýza}
+Po odstranění trendu jsou rezidua analyzována z~hlediska periodických
+složek pomocí modulu \texttt{doris.analysis.spectral}, který je sdílen
+s~analýzou přesnosti drah. Jsou implementovány dva přístupy popsané
+v~kapitole~\ref{3-5-spektralni}:
+\begin{itemize}
+    \item \texttt{compute\_periodogram} -- periodogram s~volbou metody:
+    \texttt{"fft"} pro pravidelně vzorkované řady nebo
+    \texttt{"lomb\_scargle"} pro řady s~mezerami či nepravidelným vzorkováním,
+    \item \texttt{select\_periodogram\_peaks} -- detekce dominantních peaků
+    kombinací vyhledání lokálních maxim s~odhadem hladiny šumu.
+\end{itemize}
+
+\section{Analýza drah družic}
+
+\paragraph{Načtení dat}\leavevmode\\
+Načtení dat družic ze souborů ve formátu \texttt{SP3} je v~knihovně zajištěno pomocí modulu \texttt{doris.analysis.orbits.loading}. K~dispozici jsou funkce pro načtení dat do struktury typu \texttt{pandas.DataFrame}. Funkce \texttt{load\_orbit\_dataframe} načítá data z~více souborů do jedné struktury, \texttt{load\_orbit\_day} vytváří strukturu pro jeden konkrétní den a \texttt{iter\_orbit\_days} umožňuje vytváření struktur po jednotlivých dnech v~zadaném časovém úseku. Pro převod jednotek a sjednocení časové škály slouží funkce \texttt{convert\_trajectory\_units}, která zajišťuje převod souřadnic a rychlostí na základní jednotky a sjednocení časové reprezentace.
+
+\paragraph{Interpolace na společné epochy}\leavevmode\\
+Pro porovnání dvou řešení je nutné, aby byly polohy družic vyhodnoceny ve stejných časových epochách. Jelikož se epochy jednotlivých řešení po převodu na jednotnou časovou škálu zpravidla neshodují, je nutné provést interpolaci trajektorií. V~knihovně je tento krok realizován v~modulu \texttt{doris.analysis.orbits.interpolate}, který poskytuje funkce \texttt{interpolate\_trajectory\_to\_reference} a \texttt{interpolate\_like} pro převod jedné trajektorie do epoch druhé trajektorie. Funkce pracují s~objekty typu \texttt{pandas.DataFrame}, ve kterých očekávají přítomnost časového sloupce (např.
+\texttt{MJD\_TAI}) a stavových veličin \texttt{x}, \texttt{y}, \texttt{z}, \texttt{vx}, \texttt{vy}, \texttt{vz}. Časový sloupec je buď předán explicitně, nebo je automaticky detekován z~předdefinované množiny možných názvů. Vstupní data jsou nejprve filtrována na platné hodnoty, seřazena podle času a převedena na matici tvaru \((N,7)\), která obsahuje čas, polohu a rychlost. Následně je volána nízkoúrovňová funkce \texttt{hermite\_at\_time}, která pro každou požadovanou epochu vybírá
+interpolační uzly v~jejím okolí a provádí Hermitovu interpolaci polohy. Interpolace je definována lichým stupněm polynomu, přičemž počet použitých uzlů je určen vztahem \((\texttt{stupeň}+1)/2\). Výsledkem jsou polohy družice ve stejných epochách jako referenční data, kde jsou složky \texttt{x}, \texttt{y}, \texttt{z} nahrazeny interpolovanými hodnotami.
+
+\paragraph{Porovnání drah}\leavevmode\\
+Porovnání trajektorií je realizováno modulem \texttt{doris.analysis.orbits.compare}, který poskytuje funkci \texttt{compare\_trajectories}. Tato funkce nejprve interpoluje jednu trajektorii do epoch druhé trajektorie a následně počítá rozdíly mezi odpovídajícími polohovými vektory ve tvaru $\Delta \mathbf{r} = \mathbf{r}_{\text{ref}} - \mathbf{r}_{\text{interp}}$. Výsledkem jsou rozdíly v~kartézských souřadnicích \texttt{dx}, \texttt{dy}, \texttt{dz} a jejich velikost vyjádřená normou vektoru. Výpočet může být prováděn v~metrech nebo milimetrech podle zvoleného nastavení. Funkce zároveň zajišťuje ořez okrajových částí časové řady, aby nedocházelo ke zkreslení výsledků vlivem interpolačních efektů na hranách intervalu.
+
+\paragraph{Transformace do systému RTN}\leavevmode\\
+Pro fyzikální interpretaci rozdílů trajektorií je možné výsledné kartézské rozdíly převést do lokálního orbitálního systému \zkratka{RTN}. Tato transformace je implementována v~modulu \texttt{doris.analysis.orbits.track} pomocí funkcí \texttt{build\_rtn\_frame} a \texttt{project\_to\_rtn}. Nejprve jsou z~referenční trajektorie určeny jednotkové vektory lokálního systému na základě polohy a rychlosti družice, následně jsou rozdíly projekcí rozloženy do radiální, transverzální a normálové složky. Výsledkem jsou komponenty \texttt{dR}, \texttt{dT} a \texttt{dN}, které umožňují interpretovat rozdíly mezi řešeními ve směru radiálním, podél dráhy a kolmo na rovinu dráhy.
+
+\paragraph{Metriky hodnocení}\leavevmode\\
+Pro souhrnné hodnocení rozdílů drah jsou v~knihovně připraveny funkce \texttt{orbit\_diff\_stats} a \texttt{orbit\_diff\_summary} z~modulu \texttt{doris.analysis.orbits.compare}. Funkce \texttt{orbit\_diff\_stats} počítá pro složky \texttt{dR}, \texttt{dT} a \texttt{dN} základní statistické charakteristiky, konkrétně průměrnou hodnotu, RMS a RMS0. Hodnota RMS vyjadřuje celkovou velikost rozdílů včetně případného systematického posunu, zatímco RMS0 odpovídá rozptylu rozdílů po odečtení průměrné hodnoty. Funkce \texttt{orbit\_diff\_summary} umožňuje sestavit souhrnnou tabulku těchto statistik například pro jednotlivé dny zpracování.
+
+\section{Výpočet drah v~Bernese GNSS Software}
+
+Pro kontrolu výsledků porovnání řešení drah družic \zk{SSA} a \zk{GOP} získaných pomocí knihovny \texttt{doris-analysis}, která využívá Hermitovu interpolaci, bylo provedeno doplňkové porovnání v~prostředí \zkratka{BSW}, založené na dynamické parametrizaci drah. Výpočet byl proveden v~upravené verzi \zkratka{BSW} určené pro zpracování dat systému \zkratka{DORIS}, která vychází z~verze 5.2 a byla vyvinuta Geodetickou observatoří Pecný ve spolupráci s~Technickou univerzitou v~Mnichově (TUM). Celý výpočetní postup byl realizován pomocí nástroje \zkratka{BPE}, který umožňuje propojení jednotlivých modulů systému \zkratka{BSW} do uceleného výpočetního řetězce a jejich dávkové spouštění v~předem definovaném pořadí.
+
+\subsection{Výpočetní řetězec BPE}
+
+Zpracování v~\zkratka{BPE} bylo sestaveno jako posloupnost několika dílčích kroků. Vstupem byly přesné dráhy ve formátu \texttt{SP3}, dostupné samostatně pro řešení \zk{SSA} a \zk{GOP}. Pro každé řešení byla nejprve pomocí modulu \texttt{ORBGEN} určena dynamicky parametrizovaná dráha. Takto získané dvě dynamické dráhy byly následně porovnány modulem \texttt{STDDIF}. Výstupem byly časové průběhy rozdílů mezi drahami a jejich souhrnné statistické charakteristiky.
+
+\subsection{Dynamická parametrizace modulem ORBGEN}
+
+Dynamická parametrizace byla v~modulu \texttt{ORBGEN} provedena samostatně pro \mbox{řešení} \zk{SSA} i \zk{GOP}. Vstupem byly soubory ve formátu \texttt{SP3} obsahující polohy a rych\-losti družice vzorkované po 60~s. Cílem bylo nahradit bodovou reprezentaci dráhy \mbox{dynamickou} reprezentací popsanou fyzikálním modelem pohybu a odhadovanými parametry. Parame\-trizace byla prováděna po krátkých časových úsecích o~délce přibližně \mbox{1,5~hodiny}. Jeden takový úsek, označovaný jako oblouk, odpovídá přibližně jedné oběžné době družice systému \zkratka{DORIS}. Každý oblouk byl řešen samostatně a pro každý z~nich byla určena sada parametrů popisujících lokální průběh dráhy.
+
+\subsection{Použité modely a odhadované parametry}
+
+Při dynamické parametrizaci byly použity modely popisující gravitační a negravitační vlivy působící na družici.
+
+\begin{table}[H]
+\centering
+\caption{Použité modely při dynamické parametrizaci drah}
+\label{tab:bernese-models}
+
+\renewcommand{\arraystretch}{1.2}
+
+\begin{tabularx}{\textwidth}{
+    l
+    l
+    >{\raggedright\arraybackslash}X
+}
+\toprule
+\textbf{Typ modelu} & \textbf{Model} & \textbf{Popis} \\
+\midrule
+
+Gravitační pole Země & CNES GRGS RL04~\cite{lemoine_2019_rl04} &
+Harmonický rozvoj gravitačního pole Země \\
+
+Slapové jevy & FES 2014b~\cite{lyard_2021_fes2014} &
+Model oceánských přílivů a slapových deformací \\
+
+Atmosféra & MSIS-86~\cite{hedin_1987_msis86} &
+Model hustoty atmosféry pro výpočet odporu \\
+
+Zářivé působení Země & Knocke~\cite{knocke_1988_erp} &
+Model albeda a infračerveného vyzařování Země \\
+
+Gravitační vlivy těles & DE405~\cite{standish_1998_de405} &
+Slunce, Měsíc a vybrané planety \\
+
+Standardy modelování & IERS 2010~\cite{iers_2010} &
+Doporučené konvence pro přesné modelování \\
+
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Vedle uvedených modelů byly v~jednotlivých obloucích odhadovány také parametry dráhy. Mezi ně patřilo šest počátečních parametrů určujících polohu a rychlost družice v~počáteční epoše oblouku, škálovací koeficient atmosférického odporu, škálovací koeficient tlaku slunečního záření a empirické harmonické členy typu \textit{once-per-revolution}. Tyto empirické členy jsou zaváděny s~periodou odpovídající jedné oběžné době družice a slouží k~absorbování nemodelovaných nebo nepřesně modelovaných vlivů. Pro transverzální~(T) a normálovou~(N) složku souřadnicového systému \zk{RTN} byly uvažovány sinusové a kosinusové členy, což je ekvivalentní určení amplitudy a fáze příslušné harmonické složky.
+
+\subsection{Porovnání drah modulem STDDIF}
+
+Po provedení parametrizace byly k~dispozici dvě dynamicky popsané dráhy družice odpovídající řešením \zk{SSA} a \zk{GOP}. Tyto dráhy byly následně porovnány modulem \texttt{STDDIF}. Výstupy modulu jsou poskytovány ve formě časových průběhů rozdílů mezi drahami v~jednotlivých epochách, typicky ve výstupních souborech \texttt{.OUT}, a jejich souhrnných statistických charakteristik, například ve formě souborů \texttt{.SUM}. Tyto statistiky zahrnují zejména průměrné hodnoty rozdílů, střední kvadratickou chybu (RMS) a RMS0.
+
+\subsection{Zpracování výstupů v~prostředí Python}
+
+Získané výsledky dynamického porovnání drah byly dále načteny do prostředí Python. V~tomto prostředí byly analyzovány, porovnány s~výsledky interpolační metody realizované knihovnou \texttt{doris-analysis} a následně vizualizovány jednotným způsobem společně s~ostatními výstupy práce.

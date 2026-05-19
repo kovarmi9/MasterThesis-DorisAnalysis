@@ -1,0 +1,220 @@
+\chapter{Teorie -- Časové řady}
+\label{3-teorie-casove-rady}
+
+Časové řady jsou posloupnosti hodnot měřené veličiny uspořádané podle času. Časové kroky jsou diskrétní a mohou být pravidelně nebo nepravidelně vzorkované. Měřenou veličinou může být skalární hodnota i vektor. V~geodetických aplikacích se časové řady využívají především pro popis změn souřadnic bodů v~čase. Časové řady souřadnic stanic systému \zkratka{DORIS} poskytované v~produktech \zkratka{IDS} obsahují odchylky (dN, dE, dU) vůči apriorním souřadnicím stanice (North, East, Up) a odhady nejistot těchto odchylek (sN, sE, sU). Obecně lze časovou řadu jedné složky \(y(t)\) modelovat jako kombinaci deterministických a stochastických složek~\cite{bos_2019_time_series}:
+
+\begin{equation}
+y(t) = T(t) + D(t) + P(t) + \varepsilon(t),
+\end{equation}
+kde jednotlivé členy představují:
+
+\begin{enumerate}
+    \item \textbf{Dlouhodobý trend \(T(t)\)}  
+    Lineární nebo nelineární změna souřadnic v~čase, zpravidla interpretovaná jako rychlost pohybu stanice, způsobená například pohybem litosférických desek.
+
+    \item \textbf{Diskontinuity \(D(t)\)}  
+    Náhlé změny (skoky) nebo změny trendu v~časové řadě, způsobené například výměnou přístroje, zemětřesením nebo změnou zpracování.
+
+    \item \textbf{Periodická složka \(P(t)\)}  
+    Sezónní variace souřadnic, typicky s~roční a půlroční periodou, způsobené například hydrologií nebo teplotními změnami.
+
+    \item \textbf{Náhodná složka \(\varepsilon(t)\)}  
+    Šumová složka reprezentující nemodelované procesy a chyby měření.
+\end{enumerate}
+
+Cílem analýzy časových řad je zejména:
+
+\begin{enumerate}
+    \item odhadnout dlouhodobý trend a jeho případné změny,
+    \item identifikovat a kvantifikovat diskontinuity,
+    \item určit dominantní periodicity.
+\end{enumerate}
+
+\section{Lineární trend}
+
+Lineární trend je základní model dlouhodobého chování časové řady souřadnic. V~geodetických aplikacích je běžně využíván pro odhad rychlosti pohybu stanice. Pro pozorování \(y_i\) v~čase \(t_i\) se uvažuje model
+\begin{equation}
+y_i = a + b\,t_i + \varepsilon_i,
+\label{eq:lin_model}
+\end{equation}
+kde
+\begin{itemize}
+    \item \(a\) je absolutní člen,
+    \item \(b\) je směrnice přímky vyjadřující rychlost změny v~čase (např. v~mm/rok),
+    \item \(\varepsilon_i\) je náhodná zbytková složka.
+\end{itemize}
+Model lze zapsat maticově jako
+\begin{equation}
+\mathbf{y}=\mathbf{X}\boldsymbol{\beta}+\boldsymbol{\varepsilon},
+\end{equation}
+kde platí
+\[
+\mathbf{y}=\begin{bmatrix}y_1\\y_2\\\vdots\\y_n\end{bmatrix},\quad
+\mathbf{X}=\begin{bmatrix}1&t_1\\1&t_2\\\vdots&\vdots\\1&t_n\end{bmatrix},\quad
+\boldsymbol{\beta}=\begin{bmatrix}a\\b\end{bmatrix},\quad
+\boldsymbol{\varepsilon}=\begin{bmatrix}\varepsilon_1\\\varepsilon_2\\\vdots\\\varepsilon_n\end{bmatrix}.
+\]
+
+\paragraph{Odhad parametrů metodou nejmenších čtverců}\leavevmode\\
+Parametry \((a,b)\) se odhadují metodou nejmenších čtverců, která je založena na minimalizaci součtu čtverců reziduí. Pro jednotlivá pozorování to lze zapsat jako
+\begin{equation}
+RSS = \sum_{i=1}^{n} p_i \left(y_i - a - b\,t_i\right)^2 \rightarrow \min,
+\label{eq:lsq_min}
+\end{equation}
+kde \(p_i\) jsou váhy jednotlivých pozorování, často volené například jako \(p_i = 1/\sigma_i^2\).
+
+\noindent RSS lze v~maticovém zápisu zapsat jako
+\begin{equation}
+RSS = \mathbf{e}^\mathrm{T}\mathbf{P}\mathbf{e} \rightarrow \min,
+\label{eq:lsq_matrix}
+\end{equation}
+kde \(\mathbf{e} = \mathbf{y} - \mathbf{X}\boldsymbol{\beta}\) je vektor reziduí
+a \(\mathbf{P} = \mathrm{diag}(p_1,\dots,p_n)\) je diagonální matice vah.
+Odhad parametrů je dán vztahem
+\begin{equation}
+\hat{\boldsymbol{\beta}} = (\mathbf{X}^\mathrm{T}\mathbf{P}\mathbf{X})^{-1}\mathbf{X}^\mathrm{T}\mathbf{P}\mathbf{y}.
+\end{equation}
+Vyrovnané hodnoty a rezidua jsou dány vztahy:
+\begin{equation}
+\hat{y}_i=\hat{a}+\hat{b}\,t_i,\qquad
+e_i=y_i-\hat{y}_i.
+\label{eq:residuals}
+\end{equation}
+Koeficient determinace \(R^2\) vyjadřuje podíl variability vysvětlené modelem:
+\begin{equation}
+R^2=\frac{\sum_{i=1}^{n}(\hat{y}_i-\bar{y})^2}{\sum_{i=1}^{n}(y_i-\bar{y})^2},
+\label{eq:r2}
+\end{equation}
+kde \(\bar{y} = \frac{1}{n}\sum_{i=1}^{n}y_i\) je průměr pozorování.
+
+\noindent Pro následnou analýzu se často pracuje s~detrendovanou řadou
+\begin{equation}
+y^{\mathrm{detr}}_i = y_i - \hat{y}_i.
+\label{eq:detrend}
+\end{equation}
+
+\section{Model s~diskontinuitou}
+\label{3-3-mode-s-diskontinuitou}
+
+Jednoduchý lineární trend nemusí zachytit náhlé změny (skoky) nebo změny rychlosti (lom trendu).
+Proto je uvažován model se změnou parametrů v~čase \(\tau\):
+\begin{equation}
+y_i=
+\begin{cases}
+a_1+b_1\,t_i+\varepsilon_i, & t_i<\tau,\\
+a_2+b_2\,t_i+\varepsilon_i, & t_i\geq\tau.
+\end{cases}
+\label{eq:2seg_model}
+\end{equation}
+Tento model umožňuje současně popsat skok i změnu sklonu.
+
+\paragraph{Určení polohy lomu}\leavevmode\\
+Poloha lomu \(\tau\) není předem známa a určuje se testováním kandidátních hodnot \(\tau\in\mathcal{T}\),
+kde \(\mathcal{T}\) je podmnožina pozorovaných časů (krajní hodnoty se obvykle vyloučí).
+Pro každé \(\tau\) se odhadnou parametry modelu a spočte se
+\begin{equation}
+RSS(\tau)=\sum_{i=1}^{n} e_i^2(\tau),
+\label{eq:rss_tau}
+\end{equation}
+kde \(e_i(\tau)\) jsou rezidua pro daný model. Nejvhodnější \(\tau\) odpovídá minimu \(RSS(\tau)\).
+
+\paragraph{Bayesovské informační kritérium (\zk{BIC})}\leavevmode\\
+Pro posouzení vhodnosti modelu se používá Bayesovské informační kritérium (\zk{BIC}), které zohledňuje jak kvalitu aproximace, tak složitost modelu~\cite{kass_raftery_1995}:
+
+\begin{equation}
+BIC = n\,\ln\!\left(\frac{RSS}{n}\right) + k\,\ln(n),
+\label{eq:bic}
+\end{equation}
+kde \(n\) je počet pozorování a \(k\) počet odhadovaných parametrů. Pro porovnání dvou modelů se sleduje rozdíl
+\begin{equation}
+\Delta BIC = BIC_{\mathrm{2}}-BIC_{\mathrm{1}},
+\label{eq:delta_bic}
+\end{equation}
+kde \(BIC_1\) odpovídá jednoduššímu modelu a \(BIC_2\) modelu složitějšímu, přičemž \(\Delta BIC < 0\) značí preferenci složitějšího modelu, jelikož zlepšení kvality aproximace převáží penalizace za jeho vyšší složitost. Body zlomu \(\tau\) jsou přidávány iterativně, dokud \(\Delta BIC < 0\).
+
+\section{Detekce diskontinuit}
+
+Diskontinuity v~časových řadách mohou být způsobeny fyzikálními jevy (např. zemětřesení), změnami vysílače, přijímače, nebo artefakty zpracování. Diskontinuity lze určovat buď současně s~odhadem trendu, nebo samostatně, kdy je cílem identifikovat časové okamžiky nestandardního chování řady, případně odhalit diskontinuity, které nebyly při společném odhadu s~trendem zachyceny. Pro samostatnou detekci diskontinuit lze využít například metodu dvou pohyblivých oken nebo přístupy založené na vyhlazení časové řady a následné analýze jejích změn.
+
+\subsection{Metoda dvou pohyblivých oken}
+
+Metoda dvou pohyblivých oken porovnává průměrné hodnoty časové řady ve dvou úsecích dat (oknech) o~stejné délce \(W\), které jsou vůči sobě posunuty o~\(s\) vzorků. Spočteny jsou průměry v~oknech \(\mu_1\) a \(\mu_2\). Kandidát na skok je detekován, pokud platí
+\begin{equation}
+|\mu_2-\mu_1| > \lambda.
+\end{equation}
+Volbu prahu \(\lambda\) lze založit na násobku směrodatné odchylky jako heuristiku
+\begin{equation}
+\lambda = k\,\sigma,
+\end{equation}
+nebo ji lze odvodit na základě statistického testu rovnosti středních hodnot obou oken (např. dvouvýběrového t-testu), který umožňuje posoudit významnost rozdílu \(\mu_1\) a \(\mu_2\) při zvolené hladině významnosti~\cite{change_point_review}.
+
+\subsection{Vyhlazení a analýza derivace}
+
+Další možností detekce skoků v~časové řadě je potlačení vlivu náhodného šumu pomocí vyhlazení a následná analýza derivace výsledné křivky. Skok se po vyhlazení projeví jako lokálně zvětšená absolutní hodnota derivace. Pro vyhlazení lze využít například metodu LOWESS (Locally Weighted Scatterplot Smoothing), která provádí lokální regresi s~váhami klesajícími se vzdáleností v~čase~\cite{statsmodels_lowess}. Ve vyhlazené časové řadě \( \tilde{y}(t) \) lze derivaci aproximovat mezi sousedními body:
+\begin{equation}
+v_i \approx \frac{\tilde{y}_{i+1}-\tilde{y}_i}{t_{i+1}-t_i}.
+\label{eq:derivative}
+\end{equation}
+Za kandidáty skoků se považují epochy, kdy \(|v_i|\) překročí zvolený práh. Volbu prahu lze založit na násobku směrodatné odchylky hodnot derivace ve vyhlazené řadě jako heuristiku, případně jej lze odvodit na základě statistického testu (např. pomocí z-testu), který umožňuje posoudit významnost velikosti derivace při zvolené hladině významnosti.
+
+\section{Spektrální analýza}
+\label{3-5-spektralni}
+
+Po odstranění trendu a diskontinuit lze časové řady analyzovat z~hlediska periodických složek. Typicky lze očekávat roční a pololetní periodicity související s~geofyzikálními procesy. V~datech se mohou vyskytovat i další periodicity související například s~modelovými chybami. Pro identifikaci periodicit lze využít spektrální analýzu na základě Fourierovy transformace nebo Lomb--Scargleova periodogramu.
+
+\subsection{Fourierova transformace}
+
+Diskrétní Fourierova transformace převádí časovou řadu na frekvenční reprezentaci~\cite{bos_2019_time_series}:
+\begin{equation}
+Y_k = \sum_{i=0}^{n-1} y_i\, e^{-2\pi \mathrm{i} k~i/n}, \qquad k=0,1,\dots,n-1,
+\label{eq:dft}
+\end{equation}
+kde \(Y_k\) jsou komplexní koeficienty. Každému \(k\) odpovídá frekvence
+\begin{equation}
+f_k = \frac{k}{n\,\Delta t},
+\label{eq:freq}
+\end{equation}
+kde \(n\) je počet vzorků a \(\Delta t\) interval vzorkování. Pro frekvence \(f_k > 0\) odpovídá perioda vztahu
+\begin{equation}
+T_k = \frac{1}{f_k}.
+\label{eq:period}
+\end{equation}
+
+\paragraph{Rychlá Fourierova transformace (FFT)}\leavevmode\\
+FFT představuje efektivní algoritmus pro výpočet diskrétní Fourierovy \mbox{transformace} (DFT) s~výpočetní složitostí $\mathcal{O}(n \log n)$~\cite{cooley_tukey_1965}. Pro reálná data se často používá jedno\-stranné spektrum (kladné frekvence), neboť Fourierovo spektrum je pro reálné signály komplexně sdruženě symetrické.
+
+\paragraph{Identifikace dominantních periodicit}\leavevmode\\
+Dominantní periodicity se určují vyhledáním lokálních maxim amplitudového spektra. Amplituda vyjadřuje sílu příslušné harmonické složky, fáze pak její časové posunutí. Pro možnost srovnání různých stanic a složek je vhodné časovou řadu před výpočtem spektra standardizovat, například odečtením průměru a vydělením směrodatnou odchylkou.
+
+\subsection{Lomb--Scargleův periodogram}
+
+Lomb--Scargleův periodogram je metoda spektrální analýzy vhodná i pro nepravidelně vzorkovaná data~\cite{lomb_scargle}. Metoda je založena na aproximaci časové řady harmonickou funkcí pomocí metody nejmenších čtverců. Pro každou testovanou frekvenci je časová řada aproximována harmonickou funkcí ve tvaru
+
+\begin{equation}
+y(t_i) = A~\cos(\omega t_i) + B \sin(\omega t_i) + \varepsilon_i,
+\end{equation}
+kde:
+\begin{itemize}
+    \item \(A\) a \(B\) jsou koeficienty kosinusové a sinusové složky modelu,
+    \item \(\omega = 2\pi f\) je úhlová frekvence určující rychlost kmitání harmonické složky,
+    \item \(t_i\) jsou časové okamžiky pozorování,
+    \item \(y(t_i)\) jsou odpovídající hodnoty časové řady,
+    \item \(\varepsilon_i\) je náhodná složka reprezentující šum a nemodelované vlivy.
+\end{itemize}
+
+Pro každou úhlovou frekvenci \(\omega\) jsou parametry \(A\) a \(B\) odhadnuty tak, aby byl minimalizován součet čtverců reziduí, tedy aby model co nejlépe aproximoval pozorovaná data. Úhlová frekvence \(\omega\) převádí časovou proměnnou na fázi sinusové funkce a určuje rychlost kmitání harmonické složky. Zatímco frekvence \(f\) udává počet cyklů za jednotku času, úhlová frekvence vyjadřuje rychlost změny fáze sinusové funkce v~radiánech. Hodnota periodogramu pro danou frekvenci je dána vztahem~\cite{lomb_scargle}
+\begin{equation}
+P(\omega) = \frac{1}{2} \left[
+\frac{\left( \sum_{i=1}^{n} y_i \cos(\omega (t_i - \tau)) \right)^2}
+{\sum_{i=1}^{n} \cos^2(\omega (t_i - \tau))}
++
+\frac{\left( \sum_{i=1}^{n} y_i \sin(\omega (t_i - \tau)) \right)^2}
+{\sum_{i=1}^{n} \sin^2(\omega (t_i - \tau))}
+\right],
+\label{eq:ls_periodogram}
+\end{equation}
+kde \(\tau\) představuje pomocný časový posun, který je pro každou frekvenci volen tak, aby sinusová a kosinusová složka modelu byly vzájemně ortogonální.
+
+Vysoké hodnoty \(P(\omega)\) odpovídají frekvencím, pro které časová řada obsahuje výraznou periodickou složku.
+
+Na rozdíl od \zk{FFT} je výpočet Lomb--Scargleova periodogramu obecně výpočetně náročnější, protože hodnoty periodogramu jsou určovány samostatně pro každou testovanou frekvenci. Přímý výpočet má proto složitost přibližně $\mathcal{O}(n \cdot m)$, kde \(m\) je počet testovaných frekvencí~\cite{lomb_scargle}.
