@@ -1,0 +1,313 @@
+\chapter{Teorie -- Dráhy družic}
+\label{4-teorie-drahy-druzic}
+
+\section{Pohyb družice (Keplerovský pohyb)}
+
+Pohyb družice lze idealizovat jako pohyb v~gravitačním poli Země, kde je Země uvažována jako koule se středově souměrným rozložením hmoty a nejsou uvažovány žádné vnější vlivy. Takto zjednodušený model pohybu se označuje jako Keplerovský pohyb a představuje základní teoretický popis oběžných drah~\cite{bursa_kostelecky_1994}. Gravitační pole ideální Země lze popsat gravitačním potenciálem
+
+\begin{equation}
+V~= -\frac{GM}{\rho},
+\end{equation}
+kde:
+\begin{itemize}
+    \item $G$ je gravitační konstanta,
+    \item $M$ hmotnost Země,
+    \item $\rho = |\mathbf{r}|$ vzdálenost družice od středu Země,
+    \item $\mathbf r$ je polohový vektor družice vzhledem ke středu Země.
+\end{itemize}
+Zrychlení družice v~potenciálovém poli je dáno záporným gradientem potenciálu
+
+\begin{equation}
+\ddot{\mathbf r} = - \nabla V.
+\end{equation}
+Pro potenciál gravitačního pole ideální Země pak platí
+
+\begin{equation}
+\nabla V~= \frac{GM}{\rho^3}\mathbf r,
+\end{equation}
+a výsledná rovnice pohybu má tvar
+
+\begin{equation}
+\ddot{\mathbf r} = -\frac{GM}{\rho^3}\mathbf r.
+\end{equation}
+
+Tuto rovnici lze rozložit jako soustavu tří diferenciálních rovnic druhého řádu, která při zadaných počátečních podmínkách (poloze a rychlosti), jednoznačně určuje pohyb družice. Z~jejího tvaru je zřejmé, že zrychlení je v~každém okamžiku orientováno do středu Země, a pohyb tedy probíhá v~centrálním silovém poli. V~centrálním silovém poli je zachován moment hybnosti družice
+
+\begin{equation}
+\mathbf h = \mathbf r \times \dot{\mathbf r},
+\end{equation}
+z~čehož plyne, že pohyb probíhá v~jedné rovině a že plošná rychlost průvodiče je konstantní. Tato vlastnost odpovídá druhému Keplerovu zákonu~\cite{bursa_kostelecky_1994}.
+
+Řešením rovnice pohybu v~centrálním gravitačním poli jsou kuželosečky. V~případě umělých družic Země se jedná především o~eliptické dráhy, které lze popsat vztahem
+
+\begin{equation}
+\rho = \frac{a(1 - e^2)}{1 + e \cos \nu},
+\end{equation}
+
+kde 
+\begin{itemize}
+    \item $a$ je hlavní poloosa, 
+    \item $e$ je excentricita,
+    \item $\nu$ je pravá anomálie.
+\end{itemize}
+
+Keplerovy zákony popisují geometrické vlastnosti dráhy i časový průběh pohybu. V~tomto smyslu nepředstavují samostatný předpoklad, ale důsledek pohybu v~centrálním gravitačním poli.
+
+Polohu a orientaci eliptické dráhy lze jednoznačně popsat pomocí šesti Keplerovských elementů: hlavní poloosy $a$, excentricity $e$, sklonu dráhy $i$, rektascenze vzestupného uzlu $\Omega$, argumentu perigea $\omega$ a střední anomálie $M$. Tyto parametry představují alternativní popis dráhy vůči kartézské poloze a rychlosti a v~případě Keplerovského pohybu jsou konstantní v~čase.
+
+Keplerovský pohyb představuje ideální řešení problému dvou těles. Ve skutečnosti je však pohyb družice ovlivněn řadou dalších sil, které vedou k~odchylkám od ideální eliptické dráhy a ke změnám Keplerovských elementů v~čase. Tím vzniká potřeba uvažovat obecnější, rušený pohyb družice.
+
+\section{Rušený pohyb družice}
+
+Ve skutečnosti se družice nepohybují v~ideálním centrálním gravitačním poli, protože Země není homogenní koule a na družice současně působí další gravitační i negravi\-tační vlivy. Tyto vlivy způsobují odchylky od ideálního Keplerovského pohybu a takový pohyb se označuje jako rušený pohyb družice~\cite{bursa_kostelecky_1994}. Pohyb družice proto nelze popsat pouze Keplerovským modelem, ale je nutné uvažovat obecnější rovnici pohybu ve tvaru
+
+\begin{equation}
+\ddot{\mathbf{r}} = -\frac{GM}{\rho^3}\mathbf{r} + \mathbf{a}_{\text{pert}},
+\end{equation}
+kde 
+\begin{itemize}
+    \item $\mathbf{a}_{\text{pert}}$ představuje součet poruchových zrychlení.
+\end{itemize}
+Poruchová zrychlení \(\mathbf{a_{pert}}\) lze rozdělit na gravitační a negravitační. 
+
+\paragraph{Mezi gravitační poruchy patří:}
+\begin{itemize}
+\item nesférické gravitační pole Země popsané harmonickým rozvojem,
+\item časově proměnné slapové deformace Země,
+\item gravitační působení Slunce, Měsíce a planet.
+\end{itemize}
+
+\paragraph{Mezi negravitační poruchy patří:}
+\begin{itemize}
+\item tlak slunečního záření,
+\item záření Země (albedo a infračervené vyzařování),
+\item atmosférický odpor (významný zejména pro nízké oběžné dráhy).
+\end{itemize}
+
+\section{Přesné určení drah družic}
+
+Přesné určení drah družic (POD) je proces, při němž se na základě měření a dynamického modelu pohybu odhaduje dráha družic. Dynamický model zahrnuje nejen ideální centrální gravitační pole Země, ale i jeho odchylky a další gravitační i negravitační rušivé vlivy.  Odhad dráhy je prováděn nepřímo prostřednictvím odhadu parametrů tohoto modelu, přičemž samotná trajektorie je výsledkem řešení rovnice pohybu. Cílem je určit polohu a rychlost družice v~čase s~co nejvyšší přesností. Výsledkem tohoto procesu jsou produkty přesných drah, typicky poskytované ve formátu SP3, které obsahují diskrétní hodnoty polohy a případně rychlosti družice v~čase.
+
+V~případě systému DORIS je určování dráhy založeno na měření Dopplerova posunu signálu vysílaného pozemními stanicemi a přijímaného na palubě družice. Měřený Dopplerův posun souvisí se změnou vzdálenosti mezi družicí a stanicí v~čase, tedy s~relativní rychlostí ve směru spojnice družice--stanice. Z~časového průběhu těchto měření během průletů družice nad stanicemi lze následně odhadovat parametry  dynamického modelu tak, aby výsledná dráha co nejlépe odpovídala pozorováním~\cite{ids_what_is_doris}.
+
+\section{Dynamická parametrizace dráhy}
+
+Dynamická parametrizace dráhy je způsob modelování drah družic, při kterém je dráha popsána jako řešení rovnice pohybu s~uvažováním gravitačních i negravitačních sil. Na rozdíl od čistě geometrických metod je tento přístup založen na fyzikálním modelu pohybu družice. Dráha družice je obvykle popisována na časově omezených úsecích, tzv. obloucích, v~jejichž rámci jsou aplikovány fyzikální modely a současně odhadovány parametry popisující její pohyb. Tyto parametry určují konkrétní řešení rovnice pohybu. Princip spočívá v~tom, že odhadované parametry jsou voleny tak, aby výsledná trajektorie co nejlépe odpovídala vstupním datům, například diskrétním souřadnicím družice ve formátu SP3~\cite{bernese_5_2}. V~rámci jednoho oblouku jsou aplikovány zejména následující fyzikální modely:
+% V~rámci jednoho oblouku jsou využívány zejména následující modely a odhadované parametry:
+
+% \begin{itemize}
+
+% \item \textbf{Počáteční podmínky}
+% \begin{itemize}
+% \item Šest parametrů určujících stav družice v~epoše na začátku oblouku. Tyto parametry lze vyjádřit jako polohový vektor a vektor rychlosti, nebo ekvivalentně šesti Keplerovskými elementy.
+% \end{itemize}
+
+% \item \textbf{Gravitační model}
+% \begin{itemize}
+% \item Nesférické gravitační pole Země, popsané pomocí harmonického rozvoje
+% \item Slapové jevy
+% \item Gravitační působení Slunce, Měsíce a blízkých planet
+% \end{itemize}
+
+% \item \textbf{Modely negravitačních sil}
+% \begin{itemize}
+% \item Apriorní model hustoty atmosféry MSIS-86
+% \item Měřítkový koeficient atmosférického odporu
+% \item Měřítkový koeficient tlaku slunečního záření
+% \item Záření odražené a vyzařované Zemí (albedo a infračervené záření)
+% \end{itemize}
+
+% \item \textbf{Empirické parametry}
+% Jsou parametry, které nemají jasný fyzikální význam, ale zachycují nemodelované nebo nepřesně modelované vlivy. Mají periodu přibližně odpovídající oběžné době družice. Tyto parametry jsou obvykle definovány ve směrech:
+% \begin{itemize}
+% \item R -- radiální (ve směru polohového vektoru),
+% \item T -- transverzální (ve směru pohybu družice),
+% \item N -- normálový (kolmo na rovinu dráhy),
+% \end{itemize}
+% a jsou vyjádřeny pomocí amplitudy a fáze (sinusové a kosinusové členy). Jejich úlohou je absorbovat zbytkové chyby modelování~\cite{stepanek_2023_gop_itrf2020}.
+
+% \end{itemize}
+\begin{itemize}
+
+\item \textbf{Gravitační modely}
+\begin{itemize}
+\item Nesférické gravitační pole Země, popsané pomocí harmonického rozvoje
+\item Slapové jevy
+\item Gravitační působení Slunce, Měsíce a blízkých planet
+\end{itemize}
+
+\item \textbf{Modely negravitačních sil}
+\begin{itemize}
+\item Apriorní model hustoty atmosféry MSIS-86
+\item Apriorní model tlaku slunečního záření
+\item Záření odražené a vyzařované Zemí (albedo a infračervené záření)
+\end{itemize}
+
+\end{itemize}
+
+\noindent Současně jsou v~rámci jednotlivých oblouků odhadovány následující parametry:
+
+\begin{itemize}
+
+\item \textbf{Počáteční podmínky}
+\begin{itemize}
+\item Šest parametrů určujících stav družice v~epoše na začátku oblouku. Tyto parametry lze vyjádřit jako polohový vektor a vektor rychlosti, nebo ekvivalentně šesti Keplerovskými elementy.
+\end{itemize}
+
+\item \textbf{Odhadované parametry negravitačních sil}
+\begin{itemize}
+\item Měřítkový koeficient atmosférického odporu
+\item Měřítkový koeficient tlaku slunečního záření
+\end{itemize}
+
+\item \textbf{Empirické parametry}
+Jsou parametry, které nemají jasný fyzikální význam, ale zachycují nemodelované nebo nepřesně modelované vlivy. Mají periodu přibližně odpovídající oběžné době družice. Tyto parametry jsou obvykle definovány ve směrech:
+\begin{itemize}
+\item R -- radiální (ve směru polohového vektoru),
+\item T -- transverzální (ve směru pohybu družice),
+\item N -- normálový (kolmo na rovinu dráhy),
+\end{itemize}
+a jsou vyjádřeny pomocí amplitudy a fáze (sinusové a kosinusové členy). Jejich úlohou je absorbovat zbytkové chyby modelování~\cite{stepanek_2023_gop_itrf2020}.
+
+\end{itemize}
+
+\section{Interpolace drah}
+
+Kromě dynamické parametrizace dráhy z~diskrétních bodů lze pro určení polohy družice v~konkrétní epoše využít také interpolaci mezi známými body, která je čistě matematickým přístupem a nevyžaduje zahrnutí fyzikálních vlivů do výpočtu. Pohyb družice po oběžné dráze je nelineární, a proto je při požadavku na vysokou přesnost vhodné použít interpolační metodu, která kromě polohy zohledňuje také první derivaci polohy, tedy rychlost družice~\cite{zeitlhoefler_2024_interpolation}.
+
+\paragraph{Hermitova interpolace}\leavevmode\\
+Hermitova interpolace v~uzlech respektuje nejen hodnotu funkce $f(t)$, ale i její první derivaci $f'(t)$. V~případě drah družic představuje funkce $f(t)$ polohu družice $\mathbf r(t)$ a její derivace $f'(t)$ odpovídá rychlosti družice $\mathbf v(t)=\dot{\mathbf r}(t)$. Jsou dány uzly \(t_0, t_1, \dots, t_n\), v~nichž jsou známy hodnoty $f(t_k)$ a $f'(t_k)$. Hermitův interpolační polynom má stupeň nejvýše $2n+1$~\cite{zeitlhoefler_2024_interpolation}. V~obecném tvaru lze Hermitovu interpolaci zapsat jako:
+
+\begin{equation}
+H_{2n+1}(t) = \sum_{k=0}^{n} f(t_k)\,H_{n,k}(t) + \sum_{k=0}^{n} f'(t_k)\,\hat H_{n,k}(t).
+\label{eq:hermite_general}
+\end{equation}
+
+\paragraph{Lagrangeovy bázové funkce}\leavevmode\\
+Základem konstrukce Hermitova interpolačního polynomu jsou Lagrangeovy bázové funkce:
+
+\begin{equation}
+L_{n,k}(t)=
+\prod_{\substack{i=0 \\ i\neq k}}^{n}
+\frac{t-t_i}{t_k-t_i}.
+\label{eq:lagrange_basis}
+\end{equation}
+Pro sestavení Hermitových bázových funkcí je dále potřeba derivace Lagrangeovy bázové funkce v~jejím vlastním uzlu, která je dána vztahem
+
+\begin{equation}
+L'_{n,k}(t_k)=
+\sum_{\substack{m=0 \\ m\neq k}}^{n}
+\frac{1}{t_k-t_m}.
+\label{eq:lagrange_deriv}
+\end{equation}
+
+\paragraph{Hermitovy báze}\leavevmode\\
+Pro danou epochu $t^\ast$
+
+\begin{equation}
+\Delta t_k = t^\ast - t_k.
+\end{equation}
+Hermitovy bázové funkce mají tvar
+
+\begin{equation}
+H_{n,k}(t^\ast)
+=
+\left(
+1 - 2 \Delta t_k L'_{n,k}(t_k)
+\right)
+L_{n,k}^2(t^\ast),
+\end{equation}
+
+\begin{equation}
+\hat H_{n,k}(t^\ast)
+=
+\Delta t_k
+L_{n,k}^2(t^\ast).
+\end{equation}
+Funkce $H_{n,k}$ váží příspěvek polohy v~uzlu $t_k$,
+zatímco $\hat H_{n,k}$ váží příspěvek rychlosti.
+
+\paragraph{Výsledný tvar}
+
+Interpolovaná poloha družice v~epoše $t^\ast$ je určena vztahem
+
+\begin{equation}
+\mathbf r(t^\ast)
+=
+\sum_{k=0}^{n}
+\mathbf r(t_k)\, H_{n,k}(t^\ast)
++
+\sum_{k=0}^{n}
+\mathbf v(t_k)\, \hat H_{n,k}(t^\ast).
+\end{equation}
+kde:
+\begin{itemize}
+    \item \(\mathbf{r}\) je polohový vektor \((x, y, z)\)
+    \item \(\mathbf{v}\) je vektor rychlosti \((v_x, v_y, v_z)\)
+\end{itemize}
+
+Interpolace je prováděna složkově pro jednotlivé kartézské souřadnice, přičemž bázové funkce jsou společné pro všechny složky vektoru. Interpolační polynom je obvykle konstruován na základě uzlů z~okolí požadované epochy.
+
+\section{Transformace rozdílů do systému RTN}
+
+Pro interpretaci rozdílů drah se často používá lokální orbitální souřadnicový systém RTN~\cite{zeitlhoefler_2024_interpolation}. Ten tvoří tři na sebe kolmé složky:
+
+\begin{itemize}
+\item R – radiální směr (směr polohového vektoru, od středu Země k~družici),
+\item T – transverzální směr (ve směru pohybu, kolmo na R v~rovině dráhy),
+\item N – normálový směr (kolmý k~rovině dráhy).
+\end{itemize}
+
+\noindent Jednotkové vektory lze definovat jako:
+\begin{equation}
+\hat{\mathbf{e}}_R = \frac{\mathbf{r}}{|\mathbf{r}|},
+\end{equation}
+
+\begin{equation}
+\hat{\mathbf{e}}_N = \frac{\mathbf{r} \times \mathbf{v}}{|\mathbf{r} \times \mathbf{v}|},
+\end{equation}
+
+\begin{equation}
+\hat{\mathbf{e}}_T = \hat{\mathbf{e}}_N \times \hat{\mathbf{e}}_R.
+\end{equation}
+
+\noindent Rozdíl dvou drah $\Delta \mathbf{r}$ lze rozložit jako:
+
+\begin{equation}
+\Delta r_R = \Delta \mathbf{r} \cdot \hat{\mathbf{e}}_R,
+\end{equation}
+
+\begin{equation}
+\Delta r_T = \Delta \mathbf{r} \cdot \hat{\mathbf{e}}_T,
+\end{equation}
+
+\begin{equation}
+\Delta r_N = \Delta \mathbf{r} \cdot \hat{\mathbf{e}}_N.
+\end{equation}
+Radiální složka je obvykle nejcitlivější na chyby modelování gravitačního pole,
+zatímco transverzální složka je citlivá na chyby v~časové synchronizaci.
+
+\section{Metriky hodnocení rozdílů drah}
+
+Pro kvantifikaci rozdílů mezi dvěma řešeními se používá:
+
+\begin{itemize}
+\item okamžitý rozdíl v~RTN,
+\item 3D rozdíl:
+\begin{equation}
+|\Delta \mathbf{r}| = \sqrt{\Delta X^2 + \Delta Y^2 + \Delta Z^2},
+\end{equation}
+\item střední kvadratická chyba (RMS):
+\begin{equation}
+\mathrm{RMS} = \sqrt{\frac{1}{n}\sum_{i=1}^{n} (\Delta r_i)^2},
+\end{equation}
+\item střední kvadratická chyba po odečtení průměru (RMS0):
+\begin{equation}
+\mathrm{RMS0} = \sqrt{\frac{1}{n}\sum_{i=1}^{n} (\Delta r_i - \overline{\Delta r})^2},
+\end{equation}
+kde $\overline{\Delta r} = \frac{1}{n}\sum_{i=1}^{n} \Delta r_i$ je průměrná hodnota rozdílů.
+\end{itemize}
+Zatímco RMS zahrnuje i případný systematický posun, RMS0 jej odečítá
+a vyjadřuje pouze rozptyl rozdílů kolem průměru. Tyto metriky umožňují
+objektivní porovnání řešení různých analytických center a posouzení
+vlivu použité metodiky.
