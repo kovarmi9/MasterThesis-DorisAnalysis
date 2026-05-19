@@ -93,40 +93,7 @@ V~případě systému DORIS je určování dráhy založeno na měření Doppler
 \section{Dynamická parametrizace dráhy}
 
 Dynamická parametrizace dráhy je způsob modelování drah družic, při kterém je dráha popsána jako řešení rovnice pohybu s~uvažováním gravitačních i negravitačních sil. Na rozdíl od čistě geometrických metod je tento přístup založen na fyzikálním modelu pohybu družice. Dráha družice je obvykle popisována na časově omezených úsecích, tzv. obloucích, v~jejichž rámci jsou aplikovány fyzikální modely a současně odhadovány parametry popisující její pohyb. Tyto parametry určují konkrétní řešení rovnice pohybu. Princip spočívá v~tom, že odhadované parametry jsou voleny tak, aby výsledná trajektorie co nejlépe odpovídala vstupním datům, například diskrétním souřadnicím družice ve formátu SP3~\cite{bernese_5_2}. V~rámci jednoho oblouku jsou aplikovány zejména následující fyzikální modely:
-% V~rámci jednoho oblouku jsou využívány zejména následující modely a odhadované parametry:
 
-% \begin{itemize}
-
-% \item \textbf{Počáteční podmínky}
-% \begin{itemize}
-% \item Šest parametrů určujících stav družice v~epoše na začátku oblouku. Tyto parametry lze vyjádřit jako polohový vektor a vektor rychlosti, nebo ekvivalentně šesti Keplerovskými elementy.
-% \end{itemize}
-
-% \item \textbf{Gravitační model}
-% \begin{itemize}
-% \item Nesférické gravitační pole Země, popsané pomocí harmonického rozvoje
-% \item Slapové jevy
-% \item Gravitační působení Slunce, Měsíce a blízkých planet
-% \end{itemize}
-
-% \item \textbf{Modely negravitačních sil}
-% \begin{itemize}
-% \item Apriorní model hustoty atmosféry MSIS-86
-% \item Měřítkový koeficient atmosférického odporu
-% \item Měřítkový koeficient tlaku slunečního záření
-% \item Záření odražené a vyzařované Zemí (albedo a infračervené záření)
-% \end{itemize}
-
-% \item \textbf{Empirické parametry}
-% Jsou parametry, které nemají jasný fyzikální význam, ale zachycují nemodelované nebo nepřesně modelované vlivy. Mají periodu přibližně odpovídající oběžné době družice. Tyto parametry jsou obvykle definovány ve směrech:
-% \begin{itemize}
-% \item R -- radiální (ve směru polohového vektoru),
-% \item T -- transverzální (ve směru pohybu družice),
-% \item N -- normálový (kolmo na rovinu dráhy),
-% \end{itemize}
-% a jsou vyjádřeny pomocí amplitudy a fáze (sinusové a kosinusové členy). Jejich úlohou je absorbovat zbytkové chyby modelování~\cite{stepanek_2023_gop_itrf2020}.
-
-% \end{itemize}
 \begin{itemize}
 
 \item \textbf{Gravitační modely}

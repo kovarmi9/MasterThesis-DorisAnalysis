@@ -212,12 +212,10 @@
 	\thechapter.%
 	\ #1}}{}}
 
-% Vysázení přebalu práce
-% \vytvorobalku
-
 % Vysázení titulní stránky práce
 \vytvortitulku {}
 
+% Zadání
 \stranka{}%
 	{\includepdf[pages=1, offset=15mm -10mm]{./images/zadani/zadani.pdf}
 	}
@@ -230,7 +228,6 @@
 \vytvorabstrakt
 
 % Vysázení prohlaseni o samostatnosti
-% \vytvorprohlaseni
 \stranka{}%
     {\includepdf[pages=1, offset=15mm -10mm]{./images/zadani/prohlaseni.pdf}
     }
@@ -273,7 +270,6 @@
 \include{zkratky}
 
 % Literatura
-% \nocite{*}
 \def\refname{Literatura}
 \bibliographystyle{mystyle}
 \bibliography{literatura}
