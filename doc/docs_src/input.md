@@ -2,55 +2,115 @@
 
 The library supports loading and processing several types of DORIS-related products and auxiliary data.
 
-Main supported inputs:
+Supported input sources include:
 
-- DORIS station coordinate time series
-- Precise satellite orbit products (SP3)
-- Bernese GNSS Software outputs
-- Local files
-- Remote files via SSH/SFTP
-- Remote products from NASA CDDIS
+- DORIS station coordinate time series,
+- precise satellite orbit products in SP3 format,
+- Bernese GNSS Software outputs,
+- local files,
+- remote files via SSH/SFTP,
+- remote products from NASA CDDIS.
 
-### Local files
+---
 
-Load precise orbit products from local SP3 files.
+## Local files
+
+Products already available on a local disk can be copied into the project structure using the local workflow.
 
 ```python
-from doris.input.local import load_orbit_dataframe
+from pathlib import Path
 
-df = load_orbit_dataframe(
-    "data/orbits/s3a2024001.sp3"
+from doris.input.local import copy_from_local
+
+result = copy_from_local(
+    source_dir=Path("external_products"),
+    local_dir=Path("data/orbits"),
+    filename_pattern="*.sp3*",
+    solution="gop",
+    satellite="srl",
+    decompress=True,
+    keep_compressed=False,
 )
 
-print(df.head())
+print(f"Files processed: {result.count}")
+print(f"Files decompressed: {result.count_decompressed}")
 ```
 
-### SSH / SFTP
+The workflow supports:
 
-Download products from remote servers using SSH/SFTP.
+- optional filename filtering,
+- automatic decompression,
+- overwrite control,
+- filtering by solution and satellite identifier.
+
+---
+
+## SSH / SFTP
+
+Remote products can be downloaded from SSH/SFTP servers.
 
 ```python
-from doris.input.ssh import download_file
+from pathlib import Path
 
-download_file(
+from doris.input.ssh import download_from_ssh
+
+result = download_from_ssh(
     host="example.server.cz",
     username="user",
-    password="password",
-    remote_path="/products/orbit.sp3",
-    local_path="data/orbit.sp3"
+    remote_dir="/products/orbits",
+    local_dir=Path("data/orbits"),
+    filename_pattern="*.sp3.Z",
+    solution="gop",
+    satellite="srl",
+    decompress=True,
 )
+
+print(f"Downloaded files: {result.count_downloaded}")
 ```
 
-### NASA CDDIS
+The SSH workflow supports:
 
-Download DORIS products directly from NASA CDDIS.
+- password authentication,
+- private key authentication,
+- interactive password prompt,
+- stored login credentials,
+- optional filename filtering,
+- automatic decompression,
+- overwrite control,
+- filtering by solution and satellite identifier.
+
+---
+
+## NASA CDDIS
+
+DORIS products can be downloaded directly from the NASA CDDIS archive.
 
 ```python
-from doris.input.cddis import download_cddis_file
+from pathlib import Path
 
-download_cddis_file(
-    remote_path="/doris/products/sp3/example.sp3.Z",
-    local_path="data/example.sp3.Z",
-    token="YOUR_EARTHDATA_TOKEN"
+from doris.input.cddis import download_from_cddis
+
+result = download_from_cddis(
+    technique="doris",
+    product="orbits",
+    solution="ssa",
+    satellite="srl",
+    output_root=Path("data"),
+    parallel_download=True,
+    max_workers=4,
+    decompress=True,
 )
+
+print(f"Downloaded files: {len(result.downloaded_paths)}")
+print(f"Decompressed files: {len(result.decompressed_paths)}")
 ```
+
+The CDDIS workflow supports:
+
+- Earthdata authentication,
+- parallel download,
+- retry handling,
+- MD5SUMS index parsing,
+- automatic archive decompression,
+- overwrite control,
+- filtering by product, solution and satellite identifier.
