@@ -13,4 +13,10 @@ docs_dir: docs_src
 
 nav:
   - Home: index.md
+  - Repository structure: structure.md
+  - Installation: installation.md
+  - Input data: input.md
+  - Station analysis: stations.md
+  - Orbit comparison: orbits.md
+  - Outputs: output.md
   - Repository: https://github.com/kovarmi9/MasterThesis-DorisAnalysis

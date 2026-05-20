@@ -1,4 +1,4 @@
 {% include-markdown "../../README.md"
-start="<!-- docs-start -->"
-end="<!-- docs-end -->"
+start="<!-- description-start -->"
+end="<!-- description-end -->"
 encoding="utf-8" %}
