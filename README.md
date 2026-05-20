@@ -7,9 +7,9 @@ Python library and supplementary materials created for the master's thesis:
 
 ### Analysis of DORIS (Doppler Orbitography and Radiopositioning Integrated by Satellite) processing results
 
-<!-- description-start -->
 ## 📄 Description
 
+<!-- description-start -->
 This repository contains the source code, notebooks, and supplementary materials created as part of a master's thesis focused on the analysis of DORIS (Doppler Orbitography and Radiopositioning Integrated by Satellite) processing results.
 
 The project provides a modular Python library for:
@@ -35,9 +35,9 @@ Project documentation:
 
 <https://kovarmi9.github.io/MasterThesis-DorisAnalysis/>
 
-<!-- installation-start -->
 ## 🔧 Installation
 
+<!-- installation-start -->
 ```bash
 git clone https://github.com/kovarmi9/MasterThesis-DorisAnalysis.git
 cd MasterThesis-DorisAnalysis
@@ -46,7 +46,6 @@ pip install -r requirements.txt
 ```
 <!-- installation-end -->
 
-<!-- usage-start -->
 ## 🚀 Basic usage
 
 ```python
@@ -65,11 +64,10 @@ print(f"Slope:     {result.slope:.2f} mm/year")
 print(f"Intercept: {result.intercept:.2f} mm")
 print(f"R2:        {result.r2:.4f}")
 ```
-<!-- usage-end -->
 
-<!-- structure-start -->
 ## 📂 Repository structure
 
+<!-- structure-start -->
 ```text
 MasterThesis-DorisAnalysis/
 ├── README.md
