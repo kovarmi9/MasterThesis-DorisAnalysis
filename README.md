@@ -35,6 +35,7 @@ Project documentation:
 
 <https://kovarmi9.github.io/MasterThesis-DorisAnalysis/>
 
+<!-- install-start -->
 ## 🔧 Installation
 
 ```bash
@@ -43,6 +44,7 @@ cd MasterThesis-DorisAnalysis
 pip install -e .
 pip install -r requirements.txt
 ```
+<!-- install-end -->
 
 ## 🚀 Basic usage
 
